@@ -23,13 +23,12 @@
     "node": ">=14.0.0"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "sqlite3": "^5.1.6",
     "cors": "^2.8.5",
-    "path": "^0.12.7"
+    "express": "^4.21.2",
+    "path": "^0.12.7",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
-  
 }
