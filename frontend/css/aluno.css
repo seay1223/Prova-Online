@@ -45,11 +45,6 @@ body {
   margin-left: auto;
 }
 
-.user-info span {
-  margin-right: 15px;
-  font-weight: 500;
-}
-
 .logout-btn {
   background-color: rgba(255, 255, 255, 0.2);
   color: white;
@@ -106,7 +101,7 @@ body {
 }
 
 .card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-10px);
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
 }
 
@@ -151,7 +146,6 @@ body {
   color: white;
   text-align: center;
   padding: 25px 0;
-  border-radius: 10px;
   margin-top: auto;
 }
 
