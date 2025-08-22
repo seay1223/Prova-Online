@@ -1,0 +1,35 @@
+{
+  "name": "prova-online",
+  "version": "1.0.0",
+  "description": "Sistema de Provas Online",
+  "homepage": "https://github.com/seay1223/Prova-Online#readme",
+  "bugs": {
+    "url": "https://github.com/seay1223/Prova-Online/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seay1223/Prova-Online.git"
+  },
+  "license": "ISC",
+  "author": "Seu Nome",
+  "type": "module",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+  
+}
