@@ -7,7 +7,16 @@ const PORT = 3000;
 
 // Middleware
 app.use(express.json());
+
+// Servir arquivos estáticos - configuração correta para sua estrutura
 app.use(express.static(path.join(__dirname, '../frontend')));
+app.use('/css', express.static(path.join(__dirname, '../frontend/css')));
+
+// Middleware para log de requisições (útil para debug)
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+});
 
 // Rotas principais
 app.get('/', (req, res) => {
@@ -24,6 +33,18 @@ app.get('/aluno', (req, res) => {
 
 app.get('/professor', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
+});
+
+app.get('/contato', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
+});
+
+app.get('/politica', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/politica/politica.html'));
+});
+
+app.get('/termos', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
 });
 
 // API - CRUD de Provas
@@ -98,7 +119,29 @@ app.post('/api/provas/:id/alunos', (req, res) => {
     res.json({ message: 'Alunos designados com sucesso!' });
 });
 
+// Rota para testar se o servidor está funcionando
+app.get('/api/status', (req, res) => {
+    res.json({ 
+        status: 'online', 
+        message: 'Servidor PROVA-ONLINE está funcionando!',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Middleware para tratamento de erros 404
+app.use((req, res) => {
+    res.status(404).json({ error: 'Rota não encontrada' });
+});
+
+// Middleware para tratamento de erros gerais
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+});
+
 app.listen(PORT, () => {
     console.log('🎓 PROVA-ONLINE rodando!');
     console.log('📍 http://localhost:3000');
-});
+    console.log('📁 Servindo arquivos estáticos de:', path.join(__dirname, '../frontend'));
+    console.log('📁 Servindo CSS de:', path.join(__dirname, '../frontend/css'));
+})
