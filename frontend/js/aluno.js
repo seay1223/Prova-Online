@@ -1,47 +1,45 @@
+// Funções para as ações dos botões
+function verProvas() {
+    alert('Redirecionando para a página de provas...');
+    // window.location.href = '/provas'; // Implementar quando a rota estiver disponível
+}
+
+function realizarProva() {
+    alert('Redirecionando para a página de realização de provas...');
+    // window.location.href = '/realizar-prova'; // Implementar quando a rota estiver disponível
+}
+
+function verNotas() {
+    alert('Redirecionando para a página de notas...');
+    // window.location.href = '/notas'; // Implementar quando a rota estiver disponível
+}
+
+// Carregar informações do usuário
 document.addEventListener('DOMContentLoaded', function() {
     // Verificar se o usuário está logado
-    if (!localStorage.getItem('usuarioLogado')) {
-        window.location.href = '/login';
+    const usuarioLogado = localStorage.getItem('usuarioLogado');
+    
+    if (!usuarioLogado) {
+        alert('Você precisa estar logado para acessar esta página!');
+        window.location.href = '/aluno/login';
         return;
     }
-
-    // Adicionar interatividade aos botões - SEM ALERTS
-    document.querySelectorAll(".card-btn").forEach((button) => {
-        button.addEventListener("click", function () {
-            const cardTitle = this.parentElement.querySelector("h3").textContent;
-            
-            // Redirecionar para a página apropriada baseada no cardTitle
-            switch(cardTitle) {
-                case "Ver Provas":
-                    window.location.href = "/provas";
-                    break;
-                case "Fazer Provas":
-                    window.location.href = "/fazer-prova";
-                    break;
-                case "Ver Notas":
-                    window.location.href = "/notas";
-                    break;
-                default:
-                    // Apenas log no console sem mostrar alert para o usuário
-                    console.log("Botão clicado:", cardTitle);
+    
+    try {
+        const userData = JSON.parse(usuarioLogado);
+        document.getElementById('userEmail').textContent = userData.email || 'Aluno';
+    } catch (e) {
+        console.error('Erro ao carregar dados do usuário:', e);
+    }
+    
+    // Adicionar evento de logout
+    const logoutBtn = document.querySelector('.logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', function() {
+            if (confirm('Tem certeza que deseja sair?')) {
+                localStorage.removeItem('usuarioLogado');
+                window.location.href = '/aluno/login';
             }
         });
-    });
-
-    // Logout
-    document.querySelector(".logout-btn").addEventListener("click", function () {
-        if (confirm("Tem certeza que deseja sair?")) {
-            localStorage.removeItem('usuarioLogado');
-            window.location.href = "/login";
-        }
-    });
-
-    // Carregar informações do usuário
-    const usuario = JSON.parse(localStorage.getItem('usuarioLogado'));
-    if (usuario && usuario.email) {
-        const userInfoElement = document.querySelector('.user-info span');
-        if (userInfoElement) {
-            userInfoElement.textContent = usuario.email;
-        }
     }
 });
