@@ -1,11 +1,19 @@
-const express = require('express');
-const path = require('path');
-const db = require('./database');
-const { v4: uuidv4 } = require('uuid');
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import CREDENCIAIS from '../frontend/js/credenciais.js';
+import db from './database.js';
+
+// Como __dirname não existe no ESM, você precisa definir:
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
 const PORT = 3000;
 
-// Middleware
+// Middleware para JSON e urlencoded
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -20,8 +28,6 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/css', express.static(path.join(__dirname, '../frontend/css')));
 app.use('/js', express.static(path.join(__dirname, '../frontend/js')));
 app.use('/images', express.static(path.join(__dirname, '../frontend/images')));
-
-// Servir arquivos estáticos para pastas específicas
 app.use('/aluno', express.static(path.join(__dirname, '../frontend/aluno')));
 app.use('/professor', express.static(path.join(__dirname, '../frontend/professor')));
 app.use('/login', express.static(path.join(__dirname, '../frontend/login')));
@@ -40,84 +46,23 @@ app.use((req, res, next) => {
     next();
 });
 
-// ROTA PARA /PROVAS - DEVE VIR ANTES DAS OUTRAS ROTAS
-app.get('/provas', (req, res) => {
-    console.log('📁 Servindo /provas');
-    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
-});
-
-app.get('/provas.html', (req, res) => {
-    console.log('📁 Servindo /provas.html');
-    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
-});
-
-// Rotas para páginas principais
-app.get('/', (req, res) => {
+// Rotas principais (HTML)
+app.get(['/', '/login', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
 });
 
-app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-app.get('/login.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-// Rotas para login específico
-app.get('/aluno/login', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-app.get('/aluno/login.html', (req, res) => {
-    console.log('📁 Servindo /aluno/login.html');
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-app.get('/professor/login', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-app.get('/professor/login.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-// Rotas para dashboards
-app.get('/aluno', (req, res) => {
+app.get(['/aluno', '/aluno/dashboard', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
 });
 
-app.get('/aluno/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
-});
-
-// CORREÇÃO: Rota para /aluno/acesso redireciona para aluno.html
-app.get('/aluno/acesso', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
-});
-
-app.get('/aluno/acesso/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
-});
-
-app.get('/professor', (req, res) => {
+app.get(['/professor', '/professor/dashboard'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
 });
 
-app.get('/professor/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
-});
-
-// Rotas para páginas de acesso do aluno (se necessário)
-app.get('/aluno/acesso/provas', (req, res) => {
+app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
 });
 
-app.get('/aluno/acesso/provas.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
-});
-
-// Rotas para páginas estáticas
 app.get('/contato', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
 });
@@ -130,39 +75,39 @@ app.get('/termos', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
 });
 
-// API - Autenticação
+// API - Login
 app.post('/api/login', (req, res) => {
     const { email, senha, tipo } = req.body;
-    
-    // Verificação simples (substitua por verificação real no banco)
-    if ((tipo === 'aluno' && email.endsWith('@aluno.escola.com')) || 
-        (tipo === 'professor' && email === 'professor@escola.com')) {
-        
-        if (senha === '123456') { // Senha padrão para teste
-            res.json({ 
+
+    if (tipo === 'aluno' && CREDENCIAIS.alunos.includes(email)) {
+        if (senha === CREDENCIAIS.senhaPadrao) {
+            return res.json({ 
                 success: true, 
                 message: 'Login realizado com sucesso!',
                 user: { email, tipo }
             });
         } else {
-            res.status(401).json({ 
-                success: false, 
-                message: 'Senha incorreta' 
+            return res.status(401).json({ success: false, message: 'Senha incorreta' });
+        }
+    } else if (tipo === 'professor' && CREDENCIAIS.professores.includes(email)) {
+        if (senha === CREDENCIAIS.senhaPadrao) {
+            return res.json({ 
+                success: true, 
+                message: 'Login realizado com sucesso!',
+                user: { email, tipo }
             });
+        } else {
+            return res.status(401).json({ success: false, message: 'Senha incorreta' });
         }
     } else {
-        res.status(401).json({ 
-            success: false, 
-            message: 'Usuário não encontrado' 
-        });
+        return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
     }
 });
 
-// API - Geração de links únicos para alunos
+// API - Geração de link único para aluno
 app.post('/api/gerar-link-unico', (req, res) => {
     const { prova_id, aluno_email } = req.body;
-    
-    // Verificar se já existe um link para este aluno nesta prova
+
     db.get(
         `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_email = ?`,
         [prova_id, aluno_email],
@@ -170,27 +115,23 @@ app.post('/api/gerar-link-unico', (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            
+
             if (row) {
-                // Link já existe, retornar o existente
-                res.json({ 
+                return res.json({
                     link_unico: row.link_unico,
                     message: 'Link único já existente'
                 });
             } else {
-                // Gerar novo link único
                 const linkUnico = uuidv4();
-                
+
                 db.run(
-                    `INSERT INTO links_unicos (prova_id, aluno_email, link_unico, data_criacao) 
-                     VALUES (?, ?, ?, datetime('now'))`,
+                    `INSERT INTO links_unicos (prova_id, aluno_email, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`,
                     [prova_id, aluno_email, linkUnico],
                     function(err) {
                         if (err) {
                             return res.status(500).json({ error: err.message });
                         }
-                        
-                        res.json({ 
+                        res.json({
                             link_unico: linkUnico,
                             message: 'Link único gerado com sucesso!'
                         });
@@ -204,8 +145,7 @@ app.post('/api/gerar-link-unico', (req, res) => {
 // Rota para acesso via link único
 app.get('/acesso-unico/:linkUnico', (req, res) => {
     const { linkUnico } = req.params;
-    
-    // Verificar se o link único é válido
+
     db.get(
         `SELECT lu.*, p.titulo, p.data_limite 
          FROM links_unicos lu 
@@ -216,30 +156,25 @@ app.get('/acesso-unico/:linkUnico', (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            
+
             if (!row) {
                 return res.status(404).send('Link inválido ou já utilizado');
             }
-            
-            // Verificar se a prova ainda está dentro do prazo
+
             const dataLimite = new Date(row.data_limite);
             const agora = new Date();
-            
+
             if (agora > dataLimite) {
                 return res.status(400).send('Prazo para realização da prova expirado');
             }
-            
-            // Marcar link como utilizado
+
             db.run(
-                `UPDATE links_unicos SET utilizado = 1, data_utilizacao = datetime('now') 
-                 WHERE link_unico = ?`,
+                `UPDATE links_unicos SET utilizado = 1, data_utilizacao = datetime('now') WHERE link_unico = ?`,
                 [linkUnico],
                 function(err) {
                     if (err) {
                         console.error('Erro ao marcar link como utilizado:', err);
                     }
-                    
-                    // Redirecionar para a página da prova
                     res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova-unica.html'));
                 }
             );
@@ -247,14 +182,13 @@ app.get('/acesso-unico/:linkUnico', (req, res) => {
     );
 });
 
-// API - CRUD de Provas
+// API - CRUD Provas
 app.post('/api/provas', (req, res) => {
     const { titulo, disciplina, data_limite, tempo_limite, descricao } = req.body;
     const provaId = uuidv4();
-    
+
     db.run(
-        `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [provaId, titulo, disciplina, 'professor@escola.com', data_limite, tempo_limite, descricao],
         function(err) {
             if (err) {
@@ -265,17 +199,18 @@ app.post('/api/provas', (req, res) => {
     );
 });
 
-// NOVA ROTA: API para obter provas do aluno
+// Obter provas do aluno via query
 app.get('/api/provas/aluno', (req, res) => {
     const alunoEmail = req.query.email || req.headers['x-user-email'];
-    
+
     if (!alunoEmail) {
         return res.status(400).json({ error: 'Email do aluno não fornecido' });
     }
-    
-    db.all(`SELECT p.* FROM provas p 
-            JOIN provas_alunos pa ON p.id = pa.prova_id 
-            WHERE pa.aluno_email = ? ORDER BY p.data_criacao DESC`, 
+
+    db.all(
+        `SELECT p.* FROM provas p 
+         JOIN provas_alunos pa ON p.id = pa.prova_id 
+         WHERE pa.aluno_email = ? ORDER BY p.data_criacao DESC`,
         [alunoEmail],
         (err, rows) => {
             if (err) {
@@ -286,8 +221,10 @@ app.get('/api/provas/aluno', (req, res) => {
     );
 });
 
+// Obter provas do professor
 app.get('/api/provas', (req, res) => {
-    db.all(`SELECT * FROM provas WHERE professor_id = 'professor@escola.com' ORDER BY data_criacao DESC`, 
+    db.all(
+        `SELECT * FROM provas WHERE professor_id = 'professor@escola.com' ORDER BY data_criacao DESC`,
         (err, rows) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
@@ -297,12 +234,14 @@ app.get('/api/provas', (req, res) => {
     );
 });
 
+// Obter provas do aluno via parâmetro
 app.get('/api/provas/aluno/:email', (req, res) => {
     const { email } = req.params;
-    
-    db.all(`SELECT p.* FROM provas p 
-            JOIN provas_alunos pa ON p.id = pa.prova_id 
-            WHERE pa.aluno_email = ? ORDER BY p.data_criacao DESC`, 
+
+    db.all(
+        `SELECT p.* FROM provas p 
+         JOIN provas_alunos pa ON p.id = pa.prova_id 
+         WHERE pa.aluno_email = ? ORDER BY p.data_criacao DESC`,
         [email],
         (err, rows) => {
             if (err) {
@@ -313,62 +252,63 @@ app.get('/api/provas/aluno/:email', (req, res) => {
     );
 });
 
+// Criar questões para uma prova
 app.post('/api/provas/:id/questoes', (req, res) => {
     const { tipo, enunciado, valor, ordem, alternativas } = req.body;
     const questaoId = uuidv4();
-    
+
     db.run(
-        `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) 
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) VALUES (?, ?, ?, ?, ?, ?)`,
         [questaoId, req.params.id, tipo, enunciado, valor || 1.0, ordem],
         function(err) {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            
-            if (tipo === 'multipla_escolha' && alternativas) {
+
+            if (tipo === 'multipla_escolha' && Array.isArray(alternativas)) {
                 alternativas.forEach((alt, index) => {
                     const altId = uuidv4();
                     db.run(
-                        `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) 
-                         VALUES (?, ?, ?, ?, ?)`,
-                        [altId, questaoId, alt.texto, alt.correta || false, index]
+                        `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) VALUES (?, ?, ?, ?, ?)`,
+                        [altId, questaoId, alt.texto, alt.correta ? 1 : 0, index]
                     );
                 });
             }
-            
+
             res.json({ id: questaoId, message: 'Questão adicionada com sucesso!' });
         }
     );
 });
 
+// Associar alunos a uma prova
 app.post('/api/provas/:id/alunos', (req, res) => {
     const { alunos } = req.body;
-    
+
     alunos.forEach(email => {
         db.run(
             `INSERT OR IGNORE INTO provas_alunos (prova_id, aluno_email) VALUES (?, ?)`,
             [req.params.id, email]
         );
     });
-    
+
     res.json({ message: 'Alunos designados com sucesso!' });
 });
 
-// API - Questões e Respostas
+// Obter questões de uma prova com alternativas (se aplicável)
 app.get('/api/provas/:id/questoes', (req, res) => {
-    db.all(`SELECT * FROM questoes WHERE prova_id = ? ORDER BY ordem`, 
+    db.all(
+        `SELECT * FROM questoes WHERE prova_id = ? ORDER BY ordem`,
         [req.params.id],
         (err, rows) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            
-            // Buscar alternativas para questões de múltipla escolha
+
             const promises = rows.map(questao => {
                 return new Promise((resolve) => {
                     if (questao.tipo === 'multipla_escolha') {
-                        db.all(`SELECT * FROM alternativas WHERE questao_id = ? ORDER BY ordem`, 
+                        db.all(
+                            `SELECT * FROM alternativas WHERE questao_id = ? ORDER BY ordem`,
                             [questao.id],
                             (err, alternativas) => {
                                 questao.alternativas = alternativas || [];
@@ -380,7 +320,7 @@ app.get('/api/provas/:id/questoes', (req, res) => {
                     }
                 });
             });
-            
+
             Promise.all(promises).then(questoesComAlternativas => {
                 res.json(questoesComAlternativas);
             });
@@ -388,17 +328,15 @@ app.get('/api/provas/:id/questoes', (req, res) => {
     );
 });
 
-// API para submissão de respostas
+// Receber respostas do aluno para a prova
 app.post('/api/provas/:id/respostas', (req, res) => {
     const { aluno_email, respostas } = req.body;
-    
-    // Registrar respostas do aluno
+
     const promises = respostas.map(resposta => {
         return new Promise((resolve, reject) => {
             const respostaId = uuidv4();
             db.run(
-                `INSERT INTO respostas (id, prova_id, aluno_email, questao_id, resposta, data_submissao) 
-                 VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+                `INSERT INTO respostas (id, prova_id, aluno_email, questao_id, resposta, data_submissao) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
                 [respostaId, req.params.id, aluno_email, resposta.questao_id, resposta.resposta],
                 function(err) {
                     if (err) {
@@ -410,7 +348,7 @@ app.post('/api/provas/:id/respostas', (req, res) => {
             );
         });
     });
-    
+
     Promise.all(promises)
         .then(() => {
             res.json({ message: 'Respostas enviadas com sucesso!' });
@@ -420,33 +358,32 @@ app.post('/api/provas/:id/respostas', (req, res) => {
         });
 });
 
-// Rota de status
+// Status e health check
 app.get('/api/status', (req, res) => {
-    res.json({ 
-        status: 'online', 
+    res.json({
+        status: 'online',
         message: 'Servidor PROVA-ONLINE está funcionando!',
         timestamp: new Date().toISOString()
     });
 });
 
-// Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Middleware para tratamento de erros 404
+// Middleware 404
 app.use((req, res) => {
-    res.status(404).json({ 
+    res.status(404).json({
         error: 'Rota não encontrada',
         path: req.path,
         method: req.method
     });
 });
 
-// Middleware para tratamento de erros gerais
+// Middleware erro geral
 app.use((err, req, res, next) => {
     console.error('Erro:', err.stack);
-    res.status(500).json({ 
+    res.status(500).json({
         error: 'Erro interno do servidor',
         message: err.message
     });
@@ -454,9 +391,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
     console.log('🎓 PROVA-ONLINE rodando!');
-    console.log('📍 http://localhost:3000');
+    console.log(`📍 http://localhost:${PORT}`);
     console.log('📁 Servindo arquivos estáticos de:', path.join(__dirname, '../frontend'));
     console.log('🔄 Reinicie o servidor com: node server.js');
 });
-
-module.exports = app;

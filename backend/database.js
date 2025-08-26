@@ -1,55 +1,67 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
 
-const dbPath = path.join(__dirname, 'database.db');
-const db = new sqlite3.Database(dbPath);
+async function initialize() {
+  const db = await open({
+    filename: './database.sqlite',
+    driver: sqlite3.Database
+  });
 
-// Criar tabelas
-db.serialize(() => {
-    // Tabela de provas
-    db.run(`CREATE TABLE IF NOT EXISTS provas (
-        id TEXT PRIMARY KEY,
-        titulo TEXT NOT NULL,
-        disciplina TEXT NOT NULL,
-        professor_id TEXT NOT NULL,
-        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
-        data_limite DATETIME,
-        tempo_limite INTEGER, -- em minutos
-        descricao TEXT,
-        status TEXT DEFAULT 'rascunho'
-    )`);
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS provas (
+      id TEXT PRIMARY KEY,
+      titulo TEXT,
+      disciplina TEXT,
+      professor_id TEXT,
+      data_limite TEXT,
+      tempo_limite INTEGER,
+      descricao TEXT,
+      data_criacao TEXT DEFAULT (datetime('now'))
+    );
 
-    // Tabela de questões
-    db.run(`CREATE TABLE IF NOT EXISTS questoes (
-        id TEXT PRIMARY KEY,
-        prova_id TEXT NOT NULL,
-        tipo TEXT NOT NULL, -- multipla_escolha, verdadeiro_falso, dissertativa
-        enunciado TEXT NOT NULL,
-        valor DECIMAL(5,2) DEFAULT 1.0,
-        ordem INTEGER NOT NULL,
-        FOREIGN KEY (prova_id) REFERENCES provas (id) ON DELETE CASCADE
-    )`);
+    CREATE TABLE IF NOT EXISTS questoes (
+      id TEXT PRIMARY KEY,
+      prova_id TEXT,
+      tipo TEXT,
+      enunciado TEXT,
+      valor REAL,
+      ordem INTEGER
+    );
 
-    // Tabela de alternativas (para questões múltipla escolha)
-    db.run(`CREATE TABLE IF NOT EXISTS alternativas (
-        id TEXT PRIMARY KEY,
-        questao_id TEXT NOT NULL,
-        texto TEXT NOT NULL,
-        correta BOOLEAN DEFAULT FALSE,
-        ordem INTEGER NOT NULL,
-        FOREIGN KEY (questao_id) REFERENCES questoes (id) ON DELETE CASCADE
-    )`);
+    CREATE TABLE IF NOT EXISTS alternativas (
+      id TEXT PRIMARY KEY,
+      questao_id TEXT,
+      texto TEXT,
+      correta INTEGER,
+      ordem INTEGER
+    );
 
-    // Tabela de alunos designados para provas
-    db.run(`CREATE TABLE IF NOT EXISTS provas_alunos (
-        prova_id TEXT NOT NULL,
-        aluno_email TEXT NOT NULL,
-        PRIMARY KEY (prova_id, aluno_email),
-        FOREIGN KEY (prova_id) REFERENCES provas (id) ON DELETE CASCADE
-    )`);
+    CREATE TABLE IF NOT EXISTS provas_alunos (
+      prova_id TEXT,
+      aluno_email TEXT,
+      PRIMARY KEY(prova_id, aluno_email)
+    );
 
-    console.log('Banco de dados inicializado com sucesso!');
-});
+    CREATE TABLE IF NOT EXISTS respostas (
+      id TEXT PRIMARY KEY,
+      prova_id TEXT,
+      aluno_email TEXT,
+      questao_id TEXT,
+      resposta TEXT,
+      data_submissao TEXT
+    );
 
-module.exports = db;
+    CREATE TABLE IF NOT EXISTS links_unicos (
+      prova_id TEXT,
+      aluno_email TEXT,
+      link_unico TEXT PRIMARY KEY,
+      data_criacao TEXT,
+      utilizado INTEGER DEFAULT 0,
+      data_utilizacao TEXT
+    );
+  `);
+
+  return db;
+}
+
+export default initialize();

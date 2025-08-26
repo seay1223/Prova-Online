@@ -189,27 +189,59 @@ h1, h2, h3 {
     text-decoration: underline;
 }
 
+/* ... seu CSS anterior ... */
+
+/* Adição para o campo de tipo de usuário (radio buttons) */
+.radio-group {
+    display: flex;
+    gap: 20px;
+    margin-top: 10px;
+    margin-bottom: 20px; /* dá espaço entre o grupo de rádio e o botão */
+}
+
+.radio-group label {
+    font-weight: normal;
+    font-size: 15px;
+    color: #444;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.radio-group input[type="radio"] {
+    accent-color: #007bff;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
 /* Responsividade */
 @media (max-width: 768px) {
     .navbar, .main-container, .footer-content {
         padding-left: 15px;
         padding-right: 15px;
     }
-    
+
     .navbar h1 {
         margin-left: 0;
         text-align: center;
         width: 100%;
     }
-    
+
     .form-options {
         flex-direction: column;
         align-items: flex-start;
         gap: 10px;
     }
-    
+
     .footer-links {
         flex-direction: column;
-        gap: 10px; 
+        gap: 10px;
+    }
+
+    .radio-group {
+        flex-direction: column;
+        gap: 10px;
     }
 }
