@@ -1,14 +1,36 @@
+// frontend/js/login.js
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Credenciais pré-definidas
+    // Credenciais para alunos e professores
     const CREDENCIAIS = {
-        aluno: {
-            email: "aluno@escola.com",
-            senha: "aluno123",
+        aluno1: {
+            email: "aluno1@escola.com",
+            senha: "123456",
             tipo: "aluno"
         },
-        professor: {
-            email: "professor@escola.com", 
-            senha: "aluno123",
+        aluno2: {
+            email: "aluno2@escola.com",
+            senha: "123456",
+            tipo: "aluno"
+        },
+        aluno3: {
+            email: "aluno3@escola.com",
+            senha: "123456",
+            tipo: "aluno"
+        },
+        professor1: {
+            email: "professor1@escola.com",
+            senha: "123456",
+            tipo: "professor"
+        },
+        professor2: {
+            email: "professor2@escola.com",
+            senha: "123456",
+            tipo: "professor"
+        },
+        professor3: {
+            email: "professor3@escola.com",
+            senha: "123456",
             tipo: "professor"
         }
     };
@@ -33,44 +55,91 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // Verificar credenciais - ALUNO
-            if (email === CREDENCIAIS.aluno.email && password === CREDENCIAIS.aluno.senha) {
-                // Login bem-sucedido
-                showSuccess('Login realizado com sucesso! Redirecionando...');
-                
-                // Salvar no localStorage
-                localStorage.setItem('usuarioLogado', JSON.stringify({
-                    email: email,
-                    tipo: CREDENCIAIS.aluno.tipo
-                }));
-                
-                // Redirecionar após 1 segundo
-                setTimeout(() => {
-                    window.location.href = '/aluno';
-                }, 1000);
-                return;
+            // Verificar credenciais
+            let credencialValida = null;
+            
+            // Verificar alunos
+            if (email.startsWith('aluno') && email.endsWith('@escola.com')) {
+                const numeroAluno = email.match(/aluno(\d)@escola\.com/);
+                if (numeroAluno && numeroAluno[1] && CREDENCIAIS[`aluno${numeroAluno[1]}`]) {
+                    const aluno = CREDENCIAIS[`aluno${numeroAluno[1]}`];
+                    if (password === aluno.senha) {
+                        credencialValida = aluno;
+                    }
+                }
             }
             
-            // Verificar credenciais - PROFESSOR
-            if (email === CREDENCIAIS.professor.email && password === CREDENCIAIS.professor.senha) {
+            // Verificar professores
+            if (email.startsWith('professor') && email.endsWith('@escola.com')) {
+                const numeroProfessor = email.match(/professor(\d)@escola\.com/);
+                if (numeroProfessor && numeroProfessor[1] && CREDENCIAIS[`professor${numeroProfessor[1]}`]) {
+                    const professor = CREDENCIAIS[`professor${numeroProfessor[1]}`];
+                    if (password === professor.senha) {
+                        credencialValida = professor;
+                    }
+                }
+            }
+
+            // Se as credenciais são válidas
+            if (credencialValida) {
+                // Gerar ID único e link
+                const idUnico = gerarIdUnico(email);
+                const linkUnico = gerarLinkUnico(credencialValida.tipo, idUnico);
+                
                 // Login bem-sucedido
-                showSuccess('Login realizado com sucesso! Redirecionando...');
+                showSuccess('Login realizado com sucesso! Gerando seu link único...');
                 
                 // Salvar no localStorage
                 localStorage.setItem('usuarioLogado', JSON.stringify({
                     email: email,
-                    tipo: CREDENCIAIS.professor.tipo
+                    tipo: credencialValida.tipo,
+                    idUnico: idUnico,
+                    linkUnico: linkUnico
                 }));
                 
-                // Redirecionar após 1 segundo
+                // Mostrar o link único para o usuário
                 setTimeout(() => {
-                    window.location.href = '/professor';
-                }, 1000);
+                    const linkDiv = document.createElement('div');
+                    linkDiv.className = 'link-unico-message';
+                    linkDiv.style.marginTop = '20px';
+                    linkDiv.style.padding = '15px';
+                    linkDiv.style.backgroundColor = '#e3f2fd';
+                    linkDiv.style.borderRadius = '5px';
+                    linkDiv.style.border = '1px solid #bbdefb';
+                    
+                    linkDiv.innerHTML = `
+                        <h3 style="margin-bottom: 10px; color: #1976d2;">Seu Link Único de Acesso:</h3>
+                        <input type="text" id="linkUnicoInput" value="${linkUnico}" 
+                               style="width: 100%; padding: 8px; border: 1px solid #90caf9; border-radius: 4px; margin-bottom: 10px;" readonly>
+                        <button onclick="copiarLink()" style="background: #1976d2; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+                            Copiar Link
+                        </button>
+                    `;
+                    
+                    loginForm.parentNode.appendChild(linkDiv);
+                    
+                    // Adicionar botão para redirecionar
+                    const redirectButton = document.createElement('button');
+                    redirectButton.textContent = 'Ir para o Dashboard';
+                    redirectButton.style.background = '#4caf50';
+                    redirectButton.style.color = 'white';
+                    redirectButton.style.border = 'none';
+                    redirectButton.style.padding = '10px 20px';
+                    redirectButton.style.borderRadius = '4px';
+                    redirectButton.style.marginTop = '15px';
+                    redirectButton.style.cursor = 'pointer';
+                    redirectButton.onclick = function() {
+                        window.location.href = `/${credencialValida.tipo}`;
+                    };
+                    
+                    loginForm.parentNode.appendChild(redirectButton);
+                }, 1500);
+                
                 return;
             }
             
             // Credenciais inválidas
-            showError('E-mail ou senha incorretos. Use: aluno@escola.com / aluno123');
+            showError('E-mail ou senha incorretos. Use: aluno1@escola.com a aluno3@escola.com ou professor1@escola.com a professor3@escola.com com senha 123456');
         });
     }
     
@@ -78,11 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const usuarioLogado = localStorage.getItem('usuarioLogado');
     if (usuarioLogado && window.location.pathname === '/login') {
         const usuario = JSON.parse(usuarioLogado);
-        if (usuario.tipo === 'aluno') {
-            window.location.href = '/aluno';
-        } else if (usuario.tipo === 'professor') {
-            window.location.href = '/professor';
-        }
+        window.location.href = `/${usuario.tipo}`;
     }
     
     // Função para validar e-mail
@@ -135,8 +200,18 @@ document.addEventListener('DOMContentLoaded', function() {
     function removeMessages() {
         const errorMsg = document.querySelector('.error-message');
         const successMsg = document.querySelector('.success-message');
+        const linkMsg = document.querySelector('.link-unico-message');
         
         if (errorMsg) errorMsg.remove();
         if (successMsg) successMsg.remove();
+        if (linkMsg) linkMsg.remove();
     }
 });
+
+// Função global para copiar o link (chamada pelo botão)
+function copiarLink() {
+    const linkInput = document.getElementById('linkUnicoInput');
+    linkInput.select();
+    document.execCommand('copy');
+    alert('Link copiado para a área de transferência!');
+}

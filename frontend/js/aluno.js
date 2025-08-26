@@ -1,17 +1,17 @@
 // Funções para as ações dos botões
 function verProvas() {
     alert('Redirecionando para a página de provas...');
-    // window.location.href = '/provas'; // Implementar quando a rota estiver disponível
+    // window.location.href = '/provas'; //
 }
 
 function realizarProva() {
     alert('Redirecionando para a página de realização de provas...');
-    // window.location.href = '/realizar-prova'; // Implementar quando a rota estiver disponível
+    window.location.href = '/provas'; 
 }
 
 function verNotas() {
     alert('Redirecionando para a página de notas...');
-    // window.location.href = '/notas'; // Implementar quando a rota estiver disponível
+    // window.location.href = '/notas'; 
 }
 
 // Carregar informações do usuário
