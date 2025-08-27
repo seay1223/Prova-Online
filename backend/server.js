@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import CREDENCIAIS from '../frontend/js/credenciais.js';
 import db from './database.js';
 
 // Como __dirname não existe no ESM, você precisa definir:
@@ -75,33 +74,33 @@ app.get('/termos', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
 });
 
-// API - Login
+// API - Login (AGORA USA O BANCO DE DADOS)
 app.post('/api/login', (req, res) => {
     const { email, senha, tipo } = req.body;
 
-    if (tipo === 'aluno' && CREDENCIAIS.alunos.includes(email)) {
-        if (senha === CREDENCIAIS.senhaPadrao) {
-            return res.json({ 
-                success: true, 
-                message: 'Login realizado com sucesso!',
-                user: { email, tipo }
-            });
-        } else {
-            return res.status(401).json({ success: false, message: 'Senha incorreta' });
+    db.get(
+        `SELECT * FROM usuarios WHERE email = ? AND tipo = ?`,
+        [email, tipo],
+        (err, row) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (row) {
+                if (senha === row.senha) {
+                    return res.json({ 
+                        success: true, 
+                        message: 'Login realizado com sucesso!',
+                        user: { email, tipo }
+                    });
+                } else {
+                    return res.status(401).json({ success: false, message: 'Senha incorreta' });
+                }
+            } else {
+                return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
+            }
         }
-    } else if (tipo === 'professor' && CREDENCIAIS.professores.includes(email)) {
-        if (senha === CREDENCIAIS.senhaPadrao) {
-            return res.json({ 
-                success: true, 
-                message: 'Login realizado com sucesso!',
-                user: { email, tipo }
-            });
-        } else {
-            return res.status(401).json({ success: false, message: 'Senha incorreta' });
-        }
-    } else {
-        return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
-    }
+    );
 });
 
 // API - Geração de link único para aluno
@@ -234,7 +233,7 @@ app.get('/api/provas', (req, res) => {
     );
 });
 
-// Obter provas do aluno via parâmetro
+// Obter provas do aluno via parámetro
 app.get('/api/provas/aluno/:email', (req, res) => {
     const { email } = req.params;
 
