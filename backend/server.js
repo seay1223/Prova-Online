@@ -12,9 +12,9 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-// Middleware para JSON e urlencoded
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Middleware para JSON e urlencoded com limites aumentados
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Middleware para log de requisições
 app.use((req, res, next) => {
@@ -34,34 +34,127 @@ app.use('/contato', express.static(path.join(__dirname, '../frontend/contato')))
 app.use('/politica', express.static(path.join(__dirname, '../frontend/politica')));
 app.use('/termos', express.static(path.join(__dirname, '../frontend/termos')));
 
+// Caminhos estáticos para as páginas do professor - CORRIGIDOS
+app.use('/professor/criar', express.static(path.join(__dirname, '../frontend/professor/criar')));
+app.use('/professor/gerenciar', express.static(path.join(__dirname, '../frontend/professor/gerenciar')));
+app.use('/professor/resultados', express.static(path.join(__dirname, '../frontend/professor/resultados')));
+
 // Middleware de debug
 app.use((req, res, next) => {
     console.log('📨 Recebida requisição:', {
         method: req.method,
         path: req.path,
-        query: req.query,
         time: new Date().toLocaleTimeString()
     });
     next();
 });
 
-// Rotas principais (HTML)
+// ===== FUNÇÕES PARA OTIMIZAÇÃO =====
+
+// Fila de processamento assíncrono para criação de provas
+const processingQueue = {
+    tasks: [],
+    isProcessing: false,
+    
+    add(task) {
+        this.tasks.push(task);
+        if (!this.isProcessing) {
+            this.process();
+        }
+    },
+    
+    async process() {
+        if (this.tasks.length === 0) {
+            this.isProcessing = false;
+            return;
+        }
+        
+        this.isProcessing = true;
+        const task = this.tasks.shift();
+        
+        try {
+            await task();
+        } catch (error) {
+            console.error('Erro no processamento da tarefa:', error);
+        }
+        
+        // Processar próxima tarefa após um delay
+        setTimeout(() => this.process(), 100);
+    }
+};
+
+// Função para inserção em lote no banco de dados
+function batchInsert(table, columns, data, batchSize = 50) {
+    return new Promise((resolve, reject) => {
+        const batches = [];
+        for (let i = 0; i < data.length; i += batchSize) {
+            batches.push(data.slice(i, i + batchSize));
+        }
+        
+        let processed = 0;
+        const processBatch = (batch) => {
+            if (batch.length === 0) {
+                resolve();
+                return;
+            }
+            
+            const placeholders = batch.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
+            const values = batch.flat();
+            
+            const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${placeholders}`;
+            
+            db.run(sql, values, function(err) {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                
+                processed += batch.length;
+                console.log(`Inseridos ${processed}/${data.length} registros em ${table}`);
+                
+                // Processar próximo lote com pequeno delay
+                setTimeout(() => processBatch(batches.shift()), 50);
+            });
+        };
+        
+        processBatch(batches.shift());
+    });
+}
+
+// ===== ROTAS PRINCIPAIS (HTML) =====
+
+// Rotas de login
 app.get(['/', '/login', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
 });
 
+// Rotas do aluno
 app.get(['/aluno', '/aluno/dashboard', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
-});
-
-app.get(['/professor', '/professor/dashboard'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
 });
 
 app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
 });
 
+// Rotas do professor - CORRIGIDAS
+app.get(['/professor', '/professor/dashboard'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
+});
+
+app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
+});
+
+app.get(['/professor/gerenciar', '/professor/gerenciar.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
+});
+
+app.get(['/professor/resultados', '/professor/resultados.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
+});
+
+// Rotas de páginas institucionais
 app.get('/contato', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
 });
@@ -74,7 +167,9 @@ app.get('/termos', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
 });
 
-// API - Login (AGORA USA O BANCO DE DADOS)
+// ===== API ROUTES =====
+
+// API - Login
 app.post('/api/login', (req, res) => {
     const { email, senha, tipo } = req.body;
 
@@ -141,6 +236,57 @@ app.post('/api/gerar-link-unico', (req, res) => {
     );
 });
 
+// API - Geração de links únicos em lote (OTIMIZADA)
+app.post('/api/gerar-links-unicos', async (req, res) => {
+    const { prova_id, alunos } = req.body;
+
+    try {
+        // Verificar links existentes
+        const placeholders = alunos.map(() => '?').join(',');
+        const existingLinks = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT aluno_email, link_unico FROM links_unicos 
+                 WHERE prova_id = ? AND aluno_email IN (${placeholders})`,
+                [prova_id, ...alunos],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows);
+                }
+            );
+        });
+
+        const existingMap = new Map(existingLinks.map(row => [row.aluno_email, row.link_unico]));
+        const newLinks = [];
+        const linksToCreate = [];
+
+        alunos.forEach(email => {
+            if (existingMap.has(email)) {
+                newLinks.push({ email, link: existingMap.get(email), status: 'existente' });
+            } else {
+                const linkUnico = uuidv4();
+                newLinks.push({ email, link: linkUnico, status: 'novo' });
+                linksToCreate.push([prova_id, email, linkUnico, new Date().toISOString()]);
+            }
+        });
+
+        // Criar novos links em lote
+        if (linksToCreate.length > 0) {
+            await batchInsert('links_unicos', 
+                ['prova_id', 'aluno_email', 'link_unico', 'data_criacao'], 
+                linksToCreate
+            );
+        }
+
+        res.json({
+            links: newLinks,
+            message: 'Links processados com sucesso'
+        });
+    } catch (error) {
+        console.error('Erro ao gerar links:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Rota para acesso via link único
 app.get('/acesso-unico/:linkUnico', (req, res) => {
     const { linkUnico } = req.params;
@@ -181,21 +327,90 @@ app.get('/acesso-unico/:linkUnico', (req, res) => {
     );
 });
 
-// API - CRUD Provas
-app.post('/api/provas', (req, res) => {
-    const { titulo, disciplina, data_limite, tempo_limite, descricao } = req.body;
+// API - CRUD Provas (OTIMIZADA)
+app.post('/api/provas', async (req, res) => {
+    const { titulo, disciplina, data_limite, tempo_limite, descricao, questões, alunos } = req.body;
     const provaId = uuidv4();
 
-    db.run(
-        `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [provaId, titulo, disciplina, 'professor@escola.com', data_limite, tempo_limite, descricao],
-        function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
+    try {
+        // Inserir prova principal de forma síncrona
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [provaId, titulo, disciplina, 'professor@escola.com', data_limite, tempo_limite, descricao],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+
+        // Responder imediatamente ao professor
+        res.json({ 
+            id: provaId, 
+            message: 'Prova creat with success! Processamento em segundo plano iniciado.' 
+        });
+
+        // Processar questões e alunos em segundo plano
+        processingQueue.add(async () => {
+            try {
+                // Processar questões em lote
+                if (questões && questões.length > 0) {
+                    const questaoData = [];
+                    const alternativaData = [];
+                    
+                    questões.forEach((questao, index) => {
+                        const questaoId = uuidv4();
+                        questaoData.push([
+                            questaoId, 
+                            provaId, 
+                            questao.tipo, 
+                            questao.enunciado, 
+                            questao.valor || 1.0, 
+                            index
+                        ]);
+                        
+                        if (questao.tipo === 'multipla_escolha' && questao.alternativas) {
+                            questao.alternativas.forEach((alt, altIndex) => {
+                                alternativaData.push([
+                                    uuidv4(),
+                                    questaoId,
+                                    alt.texto,
+                                    alt.correta ? 1 : 0,
+                                    altIndex
+                                ]);
+                            });
+                        }
+                    });
+                    
+                    await batchInsert('questoes', 
+                        ['id', 'prova_id', 'tipo', 'enunciado', 'valor', 'ordem'], 
+                        questaoData
+                    );
+                    
+                    if (alternativaData.length > 0) {
+                        await batchInsert('alternativas', 
+                            ['id', 'questao_id', 'texto', 'correta', 'ordem'], 
+                            alternativaData
+                        );
+                    }
+                }
+                
+                // Processar alunos em lote
+                if (alunos && alunos.length > 0) {
+                    const alunoData = alunos.map(email => [provaId, email]);
+                    await batchInsert('provas_alunos', ['prova_id', 'aluno_email'], alunoData);
+                }
+                
+                console.log(`Prova ${provaId} processada completamente em segundo plano`);
+            } catch (error) {
+                console.error('Erro no processamento em segundo plano:', error);
             }
-            res.json({ id: provaId, message: 'Prova criada com sucesso!' });
-        }
-    );
+        });
+    } catch (error) {
+        console.error('Erro ao criar prova:', error);
+        res.status(500).json({ error: 'Erro ao criar prova' });
+    }
 });
 
 // Obter provas do aluno via query
@@ -251,7 +466,7 @@ app.get('/api/provas/aluno/:email', (req, res) => {
     );
 });
 
-// Criar questões para uma prova
+// Criar questões para uma prova (mantida para compatibilidade)
 app.post('/api/provas/:id/questoes', (req, res) => {
     const { tipo, enunciado, valor, ordem, alternativas } = req.body;
     const questaoId = uuidv4();
@@ -279,7 +494,7 @@ app.post('/api/provas/:id/questoes', (req, res) => {
     );
 });
 
-// Associar alunos a uma prova
+// Associar alunos a uma prova (mantida para compatibilidade)
 app.post('/api/provas/:id/alunos', (req, res) => {
     const { alunos } = req.body;
 
@@ -357,12 +572,48 @@ app.post('/api/provas/:id/respostas', (req, res) => {
         });
 });
 
+// API - Obter resultados de uma prova
+app.get('/api/provas/:id/resultados', (req, res) => {
+    const { id } = req.params;
+
+    db.all(
+        `SELECT r.aluno_email, q.enunciado, r.resposta, q.valor,
+                CASE WHEN q.tipo = 'multipla_escolha' THEN 
+                    (SELECT a.texto FROM alternativas a WHERE a.questao_id = q.id AND a.correta = 1)
+                ELSE NULL END as resposta_correta
+         FROM respostas r
+         JOIN questoes q ON r.questao_id = q.id
+         WHERE r.prova_id = ?
+         ORDER BY r.aluno_email, q.ordem`,
+        [id],
+        (err, rows) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            res.json(rows);
+        }
+    );
+});
+
 // Status e health check
 app.get('/api/status', (req, res) => {
     res.json({
         status: 'online',
         message: 'Servidor PROVA-ONLINE está funcionando!',
         timestamp: new Date().toISOString()
+    });
+});
+
+// Status do servidor com informações da fila
+app.get('/api/status-detalhado', (req, res) => {
+    res.json({
+        status: 'online',
+        timestamp: new Date().toISOString(),
+        fila: {
+            tarefas_pendentes: processingQueue.tasks.length,
+            processando: processingQueue.isProcessing
+        },
+        memoria: process.memoryUsage()
     });
 });
 
@@ -393,4 +644,5 @@ app.listen(PORT, () => {
     console.log(`📍 http://localhost:${PORT}`);
     console.log('📁 Servindo arquivos estáticos de:', path.join(__dirname, '../frontend'));
     console.log('🔄 Reinicie o servidor com: node server.js');
+    console.log('⚡ Modo otimizado ativado - Processamento em lote e fila assíncrona');
 });

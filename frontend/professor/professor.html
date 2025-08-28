@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prova Online - Área do Professor</title>
     <link rel="stylesheet" href="/css/professor.css">
+    <title>Prova Online - Área do Professor</title>
 </head>
 <body>
     <div class="nav-container">
         <div class="navbar">
             <h1>Prova Online - Área do Professor</h1>
             <div class="user-info">
+                <div class="user-avatar">P</div>
                 <span>Professor</span>
                 <button class="logout-btn">Sair</button>
             </div>
@@ -19,77 +20,49 @@
     
     <div class="welcome-section">
         <h2>Bem-vindo à sua área de professor</h2>
-        <p>Gerencie suas provas e atividades</p>
+        <p>Gerencie suas provas e atividades de forma simples e eficiente</p>
     </div>
     
-    <div class="container">
-        <div class="card-container">
-            <div class="card">
-                <div class="card-icon">📝</div>
-                <h3>Criar Nova Prova</h3>
-                <p>Crie uma nova prova para seus alunos.</p>
-                <button class="card-btn" onclick="abrirModalCriarProva()">Criar Prova</button>
-            </div>
-            
-            <div class="card">
-                <div class="card-icon">📋</div>
-                <h3>Gerenciar Provas</h3>
-                <p>Visualize e edite as provas criadas.</p>
-                <button class="card-btn" onclick="carregarProvas()">Ver Provas</button>
-            </div>
-            
-            <div class="card">
-                <div class="card-icon">👥</div>
-                <h3>Designar Alunos</h3>
-                <p>Atribua provas para turmas específicas.</p>
-                <button class="card-btn">Gerenciar Alunos</button>
-            </div>
+    <div class="card-container">
+        <div class="card">
+            <div class="card-icon">📝</div>
+            <h3>Criar Nova Prova</h3>
+            <p>Crie uma nova prova para seus alunos com diferentes tipos de questões.</p>
+            <a href="criarprova.html" class="card-btn">Criar Prova</a>
         </div>
         
-        <div id="lista-provas" class="provas-list" style="display: none;">
-            <h3>Provas Criadas</h3>
-            <div id="provas-container"></div>
+        <div class="card">
+            <div class="card-icon">📋</div>
+            <h3>Gerenciar Provas</h3>
+            <p>Visualize, edite e organize as provas já criadas.</p>
+            <button class="card-btn">Ver Provas</button>
         </div>
-    </div>
-
-    <!-- Modal Criar Prova -->
-    <div id="modal-prova" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Criar Nova Prova</h2>
-            <form id="form-prova">
-                <div class="form-group">
-                    <label>Título da Prova:</label>
-                    <input type="text" id="titulo-prova" required>
-                </div>
-                <div class="form-group">
-                    <label>Disciplina:</label>
-                    <input type="text" id="disciplina-prova" required>
-                </div>
-                <div class="form-group">
-                    <label>Data Limite:</label>
-                    <input type="datetime-local" id="data-limite">
-                </div>
-                <div class="form-group">
-                    <label>Tempo Limite (minutos):</label>
-                    <input type="number" id="tempo-limite" min="1">
-                </div>
-                <div class="form-group">
-                    <label>Descrição:</label>
-                    <textarea id="descricao-prova" rows="3"></textarea>
-                </div>
-                <button type="submit">Criar Prova</button>
-            </form>
+        
+        <div class="card">
+            <div class="card-icon">👥</div>
+            <h3>Designar Alunos</h3>
+            <p>Atribua provas para turmas ou alunos específicos.</p>
+            <button class="card-btn">Gerenciar Alunos</button>
+        </div>
+        
+        <div class="card">
+            <div class="card-icon">📊</div>
+            <h3>Relatórios</h3>
+            <p>Acesse relatórios de desempenho dos seus alunos.</p>
+            <button class="card-btn">Ver Relatórios</button>
         </div>
     </div>
 
     <footer class="footer">
         <div class="footer-content">
             <p>&copy; 2025 Prova Online. Todos os direitos reservados.</p>
+            <div class="footer-links">
+                <a href="/termos">Termos de Uso</a>
+                <a href="/politica">Política de Privacidade</a>
+                <a href="/contato">Contato</a>
+            </div>
         </div>
     </footer>
-
-    <script src="/js/professor.js"></script>
     <script src="/js/logout.js"></script>
 </body>
 </html>
