@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/css/login.css">
-    <title>Prova Online - Login</title>
+    <title>Prova Online - Cadastro</title>
 </head>
 <body>
     <div class="nav-container">
@@ -21,7 +21,7 @@
             <form class="login-form" id="loginForm">
                 <div class="form-group">
                     <label for="email">E-mail</label>
-                    <input type="email" id="email" name="email" required placeholder="Seu e-mail">
+                    <input type="email" id="email" name="email" required placeholder="Seu email">
                 </div>
                 
                 <div class="form-group">
@@ -33,7 +33,7 @@
                     <label>Tipo de usuário</label>
                     <div class="radio-group">
                         <label>
-                            <input type="radio" name="tipo" value="aluno"> Aluno
+                            <input type="radio" name="tipo" value="aluno" required> Aluno
                         </label>
                         <label>
                             <input type="radio" name="tipo" value="professor"> Professor
@@ -50,7 +50,7 @@
                     <a href="#" class="forgot-password">Esqueci minha senha</a>
                 </div>
                 
-                <button type="submit" class="btn btn-login">Entrar</button>
+                <button type="submit" class="btn btn-login">Cadastrar</button>
                 
                 <div class="register-link">
                     <p>Tem uma conta já? <a href="/login">Faça o login</a></p>
@@ -69,7 +69,6 @@
             </div>
         </div>
     </footer>
-
-    <script src="../js/login.js"></script>
+    <script src="../js/cadastro.js"></script>
 </body>
 </html>

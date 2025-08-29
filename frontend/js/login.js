@@ -28,8 +28,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 body: JSON.stringify({ email, senha: password, tipo })
             })
-            .then(response => response.json())
+            .then(response => {
+                // Verifica se a resposta é 401 (Unauthorized)
+                if (response.status === 401) {
+                    showError('Email ou senha incorretos. Por favor, tente novamente.');
+                    return null;
+                }
+                
+                // Verifica se a resposta é OK antes de tentar parsear como JSON
+                if (!response.ok) {
+                    throw new Error('Erro no servidor. Status: ' + response.status);
+                }
+                
+                return response.json();
+            })
             .then(data => {
+                if (!data) return; // Já tratamos o erro 401 acima
+                
                 if (data.success) {
                     // Gera link único aleatório (token)
                     const linkUnico = gerarLinkUnico(16);
@@ -54,7 +69,11 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .catch(err => {
                 console.error('Erro ao realizar login:', err);
-                showError('Erro no servidor. Tente novamente mais tarde.');
+                if (err.message.includes('Failed to fetch')) {
+                    showError('Não foi possível conectar ao servidor. Verifique sua conexão.');
+                } else {
+                    showError('Erro no servidor. Tente novamente mais tarde.');
+                }
             });
         });
     }

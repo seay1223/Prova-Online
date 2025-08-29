@@ -1,3 +1,4 @@
+import fs from 'fs';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -203,6 +204,90 @@ app.post('/api/login', (req, res) => {
     );
 });
 
+// API - Cadastro de usuários no arquivo credenciais.js (ROTA CORRIGIDA)
+// API - Cadastro de usuários no arquivo credenciais.js (ROTA CORRIGIDA)
+app.post('/api/cadastro-credenciais', (req, res) => {
+    const { email, senha, tipo } = req.body;
+
+    try {
+        // CAMINHO CORRIGIDO: credenciais.js está em ../frontend/js/
+        const credenciaisPath = path.join(__dirname, '../frontend/js/credenciais.js');
+        
+        // Verificar se o arquivo existe
+        if (!fs.existsSync(credenciaisPath)) {
+            return res.status(500).json({ 
+                success: false, 
+                message: 'Arquivo de credenciais não encontrado' 
+            });
+        }
+        
+        // Ler o arquivo atual
+        let fileContent = fs.readFileSync(credenciaisPath, 'utf8');
+        
+        // Verificar se o usuário já existe
+        if (fileContent.includes(email)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Usuário já cadastrado' 
+            });
+        }
+        
+        // Encontrar a posição para adicionar o novo email
+        const alunosIndex = fileContent.indexOf('alunos: [');
+        const professoresIndex = fileContent.indexOf('professores: [');
+        
+        if (tipo === 'aluno' && alunosIndex !== -1) {
+            // Encontrar o final do array de alunos
+            const alunosEndIndex = fileContent.indexOf(']', alunosIndex);
+            if (alunosEndIndex !== -1) {
+                // Inserir o novo email no array de alunos
+                const before = fileContent.substring(0, alunosEndIndex);
+                const after = fileContent.substring(alunosEndIndex);
+                
+                // Verificar se já existem alunos para adicionar vírgula corretamente
+                const hasExistingAlunos = before.includes("'") || before.includes('"');
+                const comma = hasExistingAlunos ? ',' : '';
+                
+                fileContent = before + comma + `\n    '${email}'` + after;
+            }
+        } else if (tipo === 'professor' && professoresIndex !== -1) {
+            // Encontrar o final do array de professores
+            const professoresEndIndex = fileContent.indexOf(']', professoresIndex);
+            if (professoresEndIndex !== -1) {
+                // Inserir o novo email no array de professores
+                const before = fileContent.substring(0, professoresEndIndex);
+                const after = fileContent.substring(professoresEndIndex);
+                
+                // Verificar se já existem professores para adicionar vírgula corretamente
+                const hasExistingProfessores = before.includes("'") || before.includes('"');
+                const comma = hasExistingProfessores ? ',' : '';
+                
+                fileContent = before + comma + `\n    '${email}'` + after;
+            }
+        } else {
+            return res.status(500).json({ 
+                success: false, 
+                message: 'Estrutura do arquivo de credenciais inválida' 
+            });
+        }
+        
+        // Escrever o conteúdo atualizado de volta no arquivo
+        fs.writeFileSync(credenciaisPath, fileContent);
+        
+        res.json({ 
+            success: true, 
+            message: 'Usuário cadastrado com sucesso!' 
+        });
+        
+    } catch (error) {
+        console.error('Erro ao atualizar credenciais:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Erro interno do servidor' 
+        });
+    }
+});
+
 // API - Geração de link único para aluno
 app.post('/api/gerar-link-unico', (req, res) => {
     const { prova_id, aluno_email } = req.body;
@@ -353,7 +438,7 @@ app.post('/api/provas', async (req, res) => {
         // Responder imediatamente ao professor
         res.json({ 
             id: provaId, 
-            message: 'Prova creat with success! Processamento em segundo plano iniciado.' 
+            message: 'Prova criada com sucesso! Processamento em segundo plano iniciado.' 
         });
 
         // Processar questões e alunos em segundo plano
