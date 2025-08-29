@@ -33,11 +33,16 @@ app.use('/login', express.static(path.join(__dirname, '../frontend/login')));
 app.use('/contato', express.static(path.join(__dirname, '../frontend/contato')));
 app.use('/politica', express.static(path.join(__dirname, '../frontend/politica')));
 app.use('/termos', express.static(path.join(__dirname, '../frontend/termos')));
+app.use('/cadastro', express.static(path.join(__dirname, '../frontend/cadastro')));
 
 // Caminhos estáticos para as páginas do professor - CORRIGIDOS
 app.use('/professor/criar', express.static(path.join(__dirname, '../frontend/professor/criar')));
 app.use('/professor/gerenciar', express.static(path.join(__dirname, '../frontend/professor/gerenciar')));
 app.use('/professor/resultados', express.static(path.join(__dirname, '../frontend/professor/resultados')));
+
+app.get(['/cadastro', '/cadastro/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/cadastro/cadastro.html'));
+});
 
 // Middleware de debug
 app.use((req, res, next) => {
