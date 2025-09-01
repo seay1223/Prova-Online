@@ -1,120 +1,101 @@
-// Contador de alternativas
-let alternativeCount = 2;
+// alternativeManager.js - Gerenciamento de alternativas
 
-// Função para adicionar alternativa
-function addAlternative() {
-    const alternativesContainer = document.getElementById('alternatives-container');
-    const newAlternative = document.createElement('div');
-    newAlternative.className = 'alternative-item';
-    
-    const letter = String.fromCharCode(65 + alternativeCount); // A, B, C, etc.
-    
-    newAlternative.innerHTML = `
-        <input type="radio" name="correct-answer" value="${alternativeCount}">
-        <input type="text" placeholder="Alternativa ${letter}">
-        <button class="btn-danger remove-alternative">X</button>
-    `;
-    
-    alternativesContainer.insertBefore(newAlternative, document.getElementById('add-alternative'));
-    
-    // Adicionar listener para o botão de remover
-    newAlternative.querySelector('.remove-alternative').addEventListener('click', function() {
-        if (document.querySelectorAll('.alternative-item').length > 2) {
-            this.parentElement.remove();
-        } else {
-            alert('A questão deve ter pelo menos 2 alternativas.');
-        }
-    });
-    
-    alternativeCount++;
-}
+export class AlternativeManager {
+    constructor() {
+        this.alternatives = [];
+        this.nextId = 1;
+    }
 
-// Função para alternar a visibilidade das alternativas
-function toggleAlternatives() {
-    const questionType = document.getElementById('question-type').value;
-    const alternativesContainer = document.getElementById('alternatives-container');
-    
-    if (questionType === 'multiple' || questionType === 'truefalse') {
-        alternativesContainer.style.display = 'block';
+    addAlternative(text = '', correct = false) {
+        const alternative = {
+            id: this.nextId++,
+            text: text.trim(),
+            correct: correct
+        };
         
-        // Se for verdadeiro/falso, criar opções específicas
-        if (questionType === 'truefalse') {
-            alternativesContainer.innerHTML = `
-                <h4>Alternativas</h4>
-                <div class="alternative-item">
-                    <input type="radio" name="correct-answer" value="0">
-                    <input type="text" value="Verdadeiro" readonly>
-                    <button class="btn-danger remove-alternative" disabled>X</button>
-                </div>
-                <div class="alternative-item">
-                    <input type="radio" name="correct-answer" value="1">
-                    <input type="text" value="Falso" readonly>
-                    <button class="btn-danger remove-alternative" disabled>X</button>
-                </div>
-            `;
-            // Re-adicionar o botão de adicionar alternativa
-            const addButton = document.createElement('button');
-            addButton.className = 'btn-secondary';
-            addButton.id = 'add-alternative';
-            addButton.textContent = '+ Adicionar Alternativa';
-            addButton.addEventListener('click', addAlternative);
-            alternativesContainer.appendChild(addButton);
+        this.alternatives.push(alternative);
+        return alternative;
+    }
+
+    removeAlternative(id) {
+        const index = this.alternatives.findIndex(alt => alt.id === id);
+        if (index !== -1) {
+            this.alternatives.splice(index, 1);
+            return true;
         }
-    } else {
-        alternativesContainer.style.display = 'none';
+        return false;
+    }
+
+    updateAlternative(id, updates) {
+        const alternative = this.alternatives.find(alt => alt.id === id);
+        if (alternative) {
+            Object.assign(alternative, updates);
+            return alternative;
+        }
+        return null;
+    }
+
+    getAlternative(id) {
+        return this.alternatives.find(alt => alt.id === id);
+    }
+
+    clearAlternatives() {
+        this.alternatives = [];
+        this.nextId = 1;
+    }
+
+    validateAlternatives() {
+        const errors = [];
+
+        if (this.alternatives.length < 2) {
+            errors.push('É necessário pelo menos 2 alternativas');
+        }
+
+        const hasCorrect = this.alternatives.some(alt => alt.correct);
+        if (!hasCorrect) {
+            errors.push('Selecione a alternativa correta');
+        }
+
+        const emptyAlts = this.alternatives.filter(alt => !alt.text.trim());
+        if (emptyAlts.length > 0) {
+            errors.push('Todas as alternativas devem ter texto');
+        }
+
+        const duplicateTexts = this.alternatives.some((alt, index) => 
+            this.alternatives.some((a, i) => i !== index && a.text.toLowerCase() === alt.text.toLowerCase())
+        );
+        if (duplicateTexts) {
+            errors.push('Existem alternativas com texto duplicado');
+        }
+
+        return errors;
+    }
+
+    shuffleAlternatives() {
+        // Salvar qual é a correta
+        const correctIndex = this.alternatives.findIndex(alt => alt.correct);
+        
+        // Embaralhar array
+        for (let i = this.alternatives.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.alternatives[i], this.alternatives[j]] = [this.alternatives[j], this.alternatives[i]];
+        }
+        
+        // Retornar o novo índice da correta
+        return this.alternatives.findIndex(alt => alt.correct);
+    }
+
+    toJSON() {
+        return this.alternatives;
+    }
+
+    fromJSON(data) {
+        if (Array.isArray(data)) {
+            this.alternatives = data;
+            this.nextId = Math.max(...data.map(alt => alt.id), 0) + 1;
+        }
     }
 }
 
-// Função para resetar as alternativas
-function resetAlternatives() {
-    alternativeCount = 2;
-    const alternativesContainer = document.getElementById('alternatives-container');
-    alternativesContainer.innerHTML = `
-        <h4>Alternativas</h4>
-        <div class="alternative-item">
-            <input type="radio" name="correct-answer" value="0">
-            <input type="text" placeholder="Alternativa A">
-            <button class="btn-danger remove-alternative">X</button>
-        </div>
-        <div class="alternative-item">
-            <input type="radio" name="correct-answer" value="1">
-            <input type="text" placeholder="Alternativa B">
-            <button class="btn-danger remove-alternative">X</button>
-        </div>
-        <button class="btn-secondary" id="add-alternative">+ Adicionar Alternativa</button>
-    `;
-    
-    // Re-adicionar event listeners
-    document.getElementById('add-alternative').addEventListener('click', addAlternative);
-    document.querySelectorAll('.remove-alternative').forEach(button => {
-        button.addEventListener('click', function() {
-            if (document.querySelectorAll('.alternative-item').length > 2) {
-                this.parentElement.remove();
-            } else {
-                alert('A questão deve ter pelo menos 2 alternativas.');
-            }
-        });
-    });
-}
-
-// Função para obter as alternativas do formulário
-function getAlternativesFromForm() {
-    const alternativeItems = document.querySelectorAll('.alternative-item');
-    const alternatives = [];
-    let correctAnswer = -1;
-    
-    alternativeItems.forEach((item, index) => {
-        const textInput = item.querySelector('input[type="text"]');
-        const radioInput = item.querySelector('input[type="radio"]');
-        
-        if (textInput.value.trim()) {
-            alternatives.push(textInput.value.trim());
-            
-            if (radioInput.checked) {
-                correctAnswer = index;
-            }
-        }
-    });
-    
-    return { alternatives, correctAnswer };
-}
+// Instância global
+export const alternativeManager = new AlternativeManager();

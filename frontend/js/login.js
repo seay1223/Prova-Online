@@ -1,8 +1,40 @@
 document.addEventListener('DOMContentLoaded', function () {
     const loginForm = document.getElementById('loginForm');
 
+    // Carregar as credenciais do arquivo externo
+    async function carregarCredenciais() {
+        try {
+            const response = await fetch('/js/credenciais.js');
+            if (!response.ok) {
+                throw new Error('Não foi possível carregar as credenciais');
+            }
+            
+            const data = await response.text();
+            
+            // Extrair as credenciais do arquivo
+            const alunosMatch = data.match(/alunos:\s*\[([^\]]+)\]/);
+            const professoresMatch = data.match(/professores:\s*\[([^\]]+)\]/);
+            const senhaMatch = data.match(/senhaPadrao:\s*'([^']+)'/);
+            
+            if (!alunosMatch || !professoresMatch || !senhaMatch) {
+                throw new Error('Formato de arquivo de credenciais inválido');
+            }
+            
+            // Processar as credenciais
+            const alunos = alunosMatch[1].split(',').map(email => email.trim().replace(/['"]/g, ''));
+            const professores = professoresMatch[1].split(',').map(email => email.trim().replace(/['"]/g, ''));
+            const senhaPadrao = senhaMatch[1];
+            
+            return { alunos, professores, senhaPadrao };
+        } catch (error) {
+            console.error('Erro ao carregar credenciais:', error);
+            showError('Erro interno do sistema. Entre em contato com o administrador.');
+            return null;
+        }
+    }
+
     if (loginForm) {
-        loginForm.addEventListener('submit', function (e) {
+        loginForm.addEventListener('submit', async function (e) {
             e.preventDefault();
 
             removeMessages();
@@ -21,60 +53,41 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            fetch('/api/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, senha: password, tipo })
-            })
-            .then(response => {
-                // Verifica se a resposta é 401 (Unauthorized)
-                if (response.status === 401) {
-                    showError('Email ou senha incorretos. Por favor, tente novamente.');
-                    return null;
-                }
-                
-                // Verifica se a resposta é OK antes de tentar parsear como JSON
-                if (!response.ok) {
-                    throw new Error('Erro no servidor. Status: ' + response.status);
-                }
-                
-                return response.json();
-            })
-            .then(data => {
-                if (!data) return; // Já tratamos o erro 401 acima
-                
-                if (data.success) {
-                    // Gera link único aleatório (token)
-                    const linkUnico = gerarLinkUnico(16);
+            // Carregar as credenciais
+            const credenciais = await carregarCredenciais();
+            if (!credenciais) return;
 
-                    // Adiciona o token ao objeto user
-                    const userComToken = {
-                        ...data.user,
-                        linkUnico
-                    };
+            // Verificar as credenciais
+            let credencialValida = false;
+            
+            if (tipo === 'aluno') {
+                credencialValida = credenciais.alunos.includes(email) && password === credenciais.senhaPadrao;
+            } else if (tipo === 'professor') {
+                credencialValida = credenciais.professores.includes(email) && password === credenciais.senhaPadrao;
+            }
 
-                    // Salva no localStorage
-                    localStorage.setItem('usuarioLogado', JSON.stringify(userComToken));
-                    showSuccess('Login realizado com sucesso! Redirecionando...');
+            if (credencialValida) {
+                // Gera link único aleatório (token)
+                const linkUnico = gerarLinkUnico(16);
 
-                    setTimeout(() => {
-                        // Redireciona para o tipo de usuário + token como query string
-                        window.location.href = `/${tipo}?token=${linkUnico}`;
-                    }, 1500);
-                } else {
-                    showError(data.message || 'Falha ao realizar login.');
-                }
-            })
-            .catch(err => {
-                console.error('Erro ao realizar login:', err);
-                if (err.message.includes('Failed to fetch')) {
-                    showError('Não foi possível conectar ao servidor. Verifique sua conexão.');
-                } else {
-                    showError('Erro no servidor. Tente novamente mais tarde.');
-                }
-            });
+                // Cria objeto de usuário
+                const userComToken = {
+                    email: email,
+                    tipo: tipo,
+                    linkUnico: linkUnico
+                };
+
+                // Salva no localStorage
+                localStorage.setItem('usuarioLogado', JSON.stringify(userComToken));
+                showSuccess('Login realizado com sucesso! Redirecionando...');
+
+                setTimeout(() => {
+                    // Redireciona para o tipo de usuário + token como query string
+                    window.location.href = `/${tipo}?token=${linkUnico}`;
+                }, 1500);
+            } else {
+                showError('Email ou senha incorretos. Por favor, tente novamente.');
+            }
         });
     }
 
