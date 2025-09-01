@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import db from './database.js';
+import db from './database/database.js';
 
 // Como __dirname não existe no ESM, você precisa definir:
 const __filename = fileURLToPath(import.meta.url);
