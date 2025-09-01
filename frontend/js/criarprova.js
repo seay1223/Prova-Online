@@ -87,6 +87,13 @@ function toggleAlternatives() {
                     <button class="btn-danger remove-alternative" disabled>X</button>
                 </div>
             `;
+            // Re-adicionar o botão de adicionar alternativa
+            const addButton = document.createElement('button');
+            addButton.className = 'btn-secondary';
+            addButton.id = 'add-alternative';
+            addButton.textContent = '+ Adicionar Alternativa';
+            addButton.addEventListener('click', addAlternative);
+            alternativesContainer.appendChild(addButton);
         }
     } else {
         alternativesContainer.style.display = 'none';
@@ -252,8 +259,47 @@ function deleteQuestion(questionId) {
 
 // Função para editar questão
 function editQuestion(questionId) {
-    // Implementar funcionalidade de edição
-    alert('Funcionalidade de edição será implementada em breve.');
+    // Encontrar a questão a ser editada
+    const questionIndex = examData.questions.findIndex(q => q.id === questionId);
+    if (questionIndex === -1) return;
+    
+    const question = examData.questions[questionIndex];
+    
+    // Preencher o formulário com os dados da questão
+    document.getElementById('question-text').value = question.text;
+    document.getElementById('question-type').value = question.type;
+    
+    // Configurar alternativas se aplicável
+    if (question.type === 'multiple' || question.type === 'truefalse') {
+        resetAlternatives();
+        
+        // Adicionar alternativas
+        question.alternatives.forEach((alt, index) => {
+            if (index >= 2) {
+                addAlternative();
+            }
+            
+            const alternativeItems = document.querySelectorAll('.alternative-item');
+            if (alternativeItems[index]) {
+                const textInput = alternativeItems[index].querySelector('input[type="text"]');
+                const radioInput = alternativeItems[index].querySelector('input[type="radio"]');
+                
+                textInput.value = alt;
+                if (index === question.correctAnswer) {
+                    radioInput.checked = true;
+                }
+            }
+        });
+    }
+    
+    toggleAlternatives();
+    
+    // Remover a questão da lista (será readicionada ao salvar)
+    examData.questions.splice(questionIndex, 1);
+    displayQuestions();
+    
+    // Rolar para o topo do formulário
+    document.getElementById('question-text').focus();
 }
 
 // Função para salvar a prova
@@ -285,35 +331,176 @@ function saveExam() {
 }
 
 // Função para enviar a prova ao servidor
+// Substitua a função sendExamToServer() por esta versão corrigida:
+
+// Função para enviar a prova ao servidor
 function sendExamToServer() {
-    // Simulação de envio para o servidor
-    console.log('Dados da prova a serem enviados:', examData);
+    // Mostrar indicador de carregamento
+    const saveButton = document.getElementById('save-exam');
+    const originalText = saveButton.textContent;
+    saveButton.textContent = 'Salvando...';
+    saveButton.disabled = true;
     
-    // Aqui você faria a requisição AJAX para o servidor
-    // Exemplo com fetch:
-    /*
-    fetch('/api/provas', {
+    // Validar dados antes de enviar
+    if (!examData.title || !examData.date || examData.questions.length === 0) {
+        alert('Dados da prova incompletos');
+        saveButton.textContent = originalText;
+        saveButton.disabled = false;
+        return;
+    }
+    
+    // Validar cada questão
+    for (let i = 0; i < examData.questions.length; i++) {
+        const question = examData.questions[i];
+        
+        if (!question.text.trim()) {
+            alert(`Questão ${i + 1} está sem enunciado`);
+            saveButton.textContent = originalText;
+            saveButton.disabled = false;
+            return;
+        }
+        
+        if ((question.type === 'multiple' || question.type === 'truefalse') && 
+            (!question.alternatives || question.alternatives.length < 2)) {
+            alert(`Questão ${i + 1} precisa de pelo menos 2 alternativas`);
+            saveButton.textContent = originalText;
+            saveButton.disabled = false;
+            return;
+        }
+        
+        if ((question.type === 'multiple' || question.type === 'truefalse') && 
+            (question.correctAnswer === undefined || question.correctAnswer === -1)) {
+            alert(`Questão ${i + 1} precisa de uma alternativa correta selecionada`);
+            saveButton.textContent = originalText;
+            saveButton.disabled = false;
+            return;
+        }
+    }
+    
+    // Verificar se a rota da API existe
+    const apiUrl = '/api/exams';
+    
+    // Enviar dados para o servidor
+    fetch(apiUrl, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json'
         },
-        body: JSON.stringify(examData)
+        body: JSON.stringify({
+            title: examData.title,
+            description: examData.description,
+            duration: parseInt(examData.duration),
+            date: examData.date,
+            questions: examData.questions.map(q => ({
+                text: q.text,
+                type: q.type,
+                alternatives: q.alternatives,
+                correctAnswer: parseInt(q.correctAnswer)
+            }))
+        })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            // Se for erro 404, a rota não existe
+            if (response.status === 404) {
+                throw new Error(`Rota da API não encontrada (404). Verifique se o endpoint ${apiUrl} está correto.`);
+            }
+            return response.json().then(err => {
+                throw new Error(err.message || `Erro HTTP: ${response.status}`);
+            }).catch(() => {
+                throw new Error(`Erro HTTP: ${response.status}`);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
-            alert('Prova salva com sucesso!');
-            // Limpar formulário ou redirecionar
+            alert('Prova salva com sucesso! ID: ' + (data.examId || data.id));
+            resetExamForm();
         } else {
-            alert('Erro ao salvar prova: ' + data.message);
+            throw new Error(data.message || 'Erro ao salvar prova');
         }
     })
     .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao conectar com o servidor.');
+        console.error('Erro detalhado:', error);
+        handleApiError(error);
+    })
+    .finally(() => {
+        saveButton.textContent = originalText;
+        saveButton.disabled = false;
     });
-    */
-    
-    // Simulando sucesso para demonstração
-    alert('Prova salva com sucesso! Em uma implementação real, os dados seriam enviados ao servidor.');
 }
+
+// Função para melhorar o tratamento de erros
+function handleApiError(error) {
+    console.error('Erro na API:', error);
+    
+    let errorMessage = 'Erro ao salvar prova: ';
+    
+    if (error.message.includes('Failed to fetch')) {
+        errorMessage += 'Erro de conexão. Verifique sua internet e tente novamente.';
+    } else if (error.message.includes('404')) {
+        errorMessage += 'Rota da API não encontrada. ';
+        errorMessage += 'Verifique se o servidor está rodando e se a rota /api/exams está configurada.';
+    } else if (error.message.includes('401') || error.message.includes('403')) {
+        errorMessage += 'Sessão expirada. Faça login novamente.';
+    } else if (error.message.includes('500')) {
+        errorMessage += 'Erro interno do servidor. Tente novamente mais tarde.';
+    } else {
+        errorMessage += error.message || 'Erro desconhecido ao salvar a prova';
+    }
+    
+    alert(errorMessage);
+}
+
+// Função alternativa para simular salvamento (para desenvolvimento)
+function simulateSaveExam() {
+    // Mostrar indicador de carregamento
+    const saveButton = document.getElementById('save-exam');
+    const originalText = saveButton.textContent;
+    saveButton.textContent = 'Salvando...';
+    saveButton.disabled = true;
+    
+    // Simular tempo de processamento
+    setTimeout(() => {
+        // Gerar ID simulado
+        const examId = 'EXAM-' + Date.now();
+        
+        // Mostrar dados no console para debug
+        console.log('Dados da prova a serem salvos:', examData);
+        
+        alert(`Prova "${examData.title}" salva com sucesso! (ID simulado: ${examId})\n\nEsta é uma simulação - no ambiente real os dados seriam enviados para o servidor.`);
+        
+        // Resetar formulário
+        resetExamForm();
+        
+        saveButton.textContent = originalText;
+        saveButton.disabled = false;
+    }, 1500);
+}
+
+// Modifique o event listener do botão salvar para usar a versão alternativa se necessário:
+document.addEventListener('DOMContentLoaded', function() {
+    // ... código anterior ...
+    
+    // Verificar se estamos em ambiente de desenvolvimento
+    const isDevelopment = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1' ||
+                         window.location.hostname === '';
+    
+    // Usar simulação em desenvolvimento se a API não estiver disponível
+    document.getElementById('save-exam').addEventListener('click', function() {
+        if (isDevelopment) {
+            // Perguntar ao usuário qual método usar
+            if (confirm('Modo desenvolvimento: Deseja simular o salvamento? (Cancelar para tentar API real)')) {
+                simulateSaveExam();
+            } else {
+                saveExam();
+            }
+        } else {
+            saveExam();
+        }
+    });
+});
