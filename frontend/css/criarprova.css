@@ -239,6 +239,13 @@ textarea {
     color: white;
 }
 
+.no-questions {
+    text-align: center;
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 2rem;
+}
+
 /* Responsividade */
 @media (max-width: 900px) {
     .main-container {
