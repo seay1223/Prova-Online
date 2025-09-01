@@ -333,7 +333,7 @@ function saveExam() {
 // Função para enviar a prova ao servidor
 // Substitua a função sendExamToServer() por esta versão corrigida:
 
-
+// Função para enviar a prova ao servidor
 function sendExamToServer() {
     // Simulação de envio para o servidor
     console.log('Dados da prova a serem enviados:', examData);
