@@ -1,6 +1,6 @@
 // main.js - Ponto de entrada principal do sistema
 
-import { serverService } from './serverService.js';
+import { serverService } from './serverSevice.js';
 import { uiManager } from './uiManager.js';
 import { ExamCreator } from './criarprova.js';
 import { questionManager } from './questionManager.js';

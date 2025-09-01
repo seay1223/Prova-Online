@@ -1,9 +1,82 @@
 // criarprova.js
-// Gerencia a criação de provas no sistema
+// Gerencia a criação de provas no sistema - Versão independente
 
-import { saveExam, updateExam } from './serverService.js';
-import { showNotification, clearNotifications } from './uiManager.js';
-import { Question, QuestionType } from './questionManager.js';
+class Question {
+    constructor(data) {
+        this.text = data.text || '';
+        this.type = data.type || 'multiple';
+        this.alternatives = data.alternatives || [];
+        this.correctAnswer = data.correctAnswer !== undefined ? data.correctAnswer : null;
+    }
+}
+
+const QuestionType = {
+    MULTIPLE: 'multiple',
+    TRUEFALSE: 'truefalse',
+    ESSAY: 'essay'
+};
+
+// Funções de serviço do servidor (simuladas)
+async function saveExam(examData) {
+    console.log('Salvando prova:', examData);
+    // Simula uma requisição ao servidor
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve({ success: true, message: 'Prova salva com sucesso!' });
+        }, 1000);
+    });
+}
+
+async function updateExam(examData) {
+    console.log('Atualizando prova:', examData);
+    // Simula uma requisição ao servidor
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve({ success: true, message: 'Prova atualizada com sucesso!' });
+        }, 1000);
+    });
+}
+
+// Funções de interface do usuário
+function showNotification(message, type) {
+    // Remove notificações existentes
+    clearNotifications();
+    
+    // Cria a nova notificação
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px;
+        border-radius: 5px;
+        color: white;
+        z-index: 1000;
+        ${type === 'success' ? 'background-color: #4CAF50;' : ''}
+        ${type === 'error' ? 'background-color: #f44336;' : ''}
+        ${type === 'info' ? 'background-color: #2196F3;' : ''}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove a notificação após 3 segundos
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 3000);
+}
+
+function clearNotifications() {
+    const notifications = document.querySelectorAll('.notification');
+    notifications.forEach(notification => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    });
+}
 
 class ExamCreator {
     constructor() {
@@ -22,6 +95,7 @@ class ExamCreator {
     init() {
         this.setupEventListeners();
         this.setMinDate();
+        this.toggleAlternatives('multiple'); // Inicializar com o tipo padrão
         this.loadDraft(); // Carregar rascunho salvo, se existir
     }
 
@@ -58,11 +132,6 @@ class ExamCreator {
 
         document.getElementById('save-exam').addEventListener('click', () => {
             this.saveExam();
-        });
-
-        // Botão para adicionar alternativa
-        document.getElementById('add-alternative').addEventListener('click', () => {
-            this.addAlternative();
         });
 
         // Delegation para botões de remover alternativa
@@ -422,5 +491,3 @@ class ExamCreator {
 document.addEventListener('DOMContentLoaded', () => {
     window.examCreator = new ExamCreator();
 });
-
-export default ExamCreator;
