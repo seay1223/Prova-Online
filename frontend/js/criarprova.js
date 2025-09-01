@@ -333,174 +333,36 @@ function saveExam() {
 // Função para enviar a prova ao servidor
 // Substitua a função sendExamToServer() por esta versão corrigida:
 
-// Função para enviar a prova ao servidor
+
 function sendExamToServer() {
-    // Mostrar indicador de carregamento
-    const saveButton = document.getElementById('save-exam');
-    const originalText = saveButton.textContent;
-    saveButton.textContent = 'Salvando...';
-    saveButton.disabled = true;
+    // Simulação de envio para o servidor
+    console.log('Dados da prova a serem enviados:', examData);
     
-    // Validar dados antes de enviar
-    if (!examData.title || !examData.date || examData.questions.length === 0) {
-        alert('Dados da prova incompletos');
-        saveButton.textContent = originalText;
-        saveButton.disabled = false;
-        return;
-    }
-    
-    // Validar cada questão
-    for (let i = 0; i < examData.questions.length; i++) {
-        const question = examData.questions[i];
-        
-        if (!question.text.trim()) {
-            alert(`Questão ${i + 1} está sem enunciado`);
-            saveButton.textContent = originalText;
-            saveButton.disabled = false;
-            return;
-        }
-        
-        if ((question.type === 'multiple' || question.type === 'truefalse') && 
-            (!question.alternatives || question.alternatives.length < 2)) {
-            alert(`Questão ${i + 1} precisa de pelo menos 2 alternativas`);
-            saveButton.textContent = originalText;
-            saveButton.disabled = false;
-            return;
-        }
-        
-        if ((question.type === 'multiple' || question.type === 'truefalse') && 
-            (question.correctAnswer === undefined || question.correctAnswer === -1)) {
-            alert(`Questão ${i + 1} precisa de uma alternativa correta selecionada`);
-            saveButton.textContent = originalText;
-            saveButton.disabled = false;
-            return;
-        }
-    }
-    
-    // Verificar se a rota da API existe
-    const apiUrl = '/api/exams';
-    
-    // Enviar dados para o servidor
-    fetch(apiUrl, {
+    // Aqui você faria a requisição AJAX para o servidor
+    // Exemplo com fetch:
+    /*
+    fetch('/api/provas', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-            'Accept': 'application/json'
+            'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            title: examData.title,
-            description: examData.description,
-            duration: parseInt(examData.duration),
-            date: examData.date,
-            questions: examData.questions.map(q => ({
-                text: q.text,
-                type: q.type,
-                alternatives: q.alternatives,
-                correctAnswer: parseInt(q.correctAnswer)
-            }))
-        })
+        body: JSON.stringify(examData)
     })
-    .then(response => {
-        if (!response.ok) {
-            // Se for erro 404, a rota não existe
-            if (response.status === 404) {
-                throw new Error(`Rota da API não encontrada (404). Verifique se o endpoint ${apiUrl} está correto.`);
-            }
-            return response.json().then(err => {
-                throw new Error(err.message || `Erro HTTP: ${response.status}`);
-            }).catch(() => {
-                throw new Error(`Erro HTTP: ${response.status}`);
-            });
-        }
-        return response.json();
-    })
+    .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Prova salva com sucesso! ID: ' + (data.examId || data.id));
-            resetExamForm();
+            alert('Prova salva com sucesso!');
+            // Limpar formulário ou redirecionar
         } else {
-            throw new Error(data.message || 'Erro ao salvar prova');
+            alert('Erro ao salvar prova: ' + data.message);
         }
     })
     .catch(error => {
-        console.error('Erro detalhado:', error);
-        handleApiError(error);
-    })
-    .finally(() => {
-        saveButton.textContent = originalText;
-        saveButton.disabled = false;
+        console.error('Erro:', error);
+        alert('Erro ao conectar com o servidor.');
     });
+    */
+    
+    // Simulando sucesso para demonstração
+    alert('Prova salva com sucesso! Em uma implementação real, os dados seriam enviados ao servidor.');
 }
-
-// Função para melhorar o tratamento de erros
-function handleApiError(error) {
-    console.error('Erro na API:', error);
-    
-    let errorMessage = 'Erro ao salvar prova: ';
-    
-    if (error.message.includes('Failed to fetch')) {
-        errorMessage += 'Erro de conexão. Verifique sua internet e tente novamente.';
-    } else if (error.message.includes('404')) {
-        errorMessage += 'Rota da API não encontrada. ';
-        errorMessage += 'Verifique se o servidor está rodando e se a rota /api/exams está configurada.';
-    } else if (error.message.includes('401') || error.message.includes('403')) {
-        errorMessage += 'Sessão expirada. Faça login novamente.';
-    } else if (error.message.includes('500')) {
-        errorMessage += 'Erro interno do servidor. Tente novamente mais tarde.';
-    } else {
-        errorMessage += error.message || 'Erro desconhecido ao salvar a prova';
-    }
-    
-    alert(errorMessage);
-}
-
-// Função alternativa para simular salvamento (para desenvolvimento)
-function simulateSaveExam() {
-    // Mostrar indicador de carregamento
-    const saveButton = document.getElementById('save-exam');
-    const originalText = saveButton.textContent;
-    saveButton.textContent = 'Salvando...';
-    saveButton.disabled = true;
-    
-    // Simular tempo de processamento
-    setTimeout(() => {
-        // Gerar ID simulado
-        const examId = 'EXAM-' + Date.now();
-        
-        // Mostrar dados no console para debug
-        console.log('Dados da prova a serem salvos:', examData);
-        
-        alert(`Prova "${examData.title}" salva com sucesso! (ID simulado: ${examId})\n\nEsta é uma simulação - no ambiente real os dados seriam enviados para o servidor.`);
-        
-        // Resetar formulário
-        resetExamForm();
-        
-        saveButton.textContent = originalText;
-        saveButton.disabled = false;
-    }, 1500);
-}
-
-// Modifique o event listener do botão salvar para usar a versão alternativa se necessário:
-document.addEventListener('DOMContentLoaded', function() {
-    // ... código anterior ...
-    
-    // Verificar se estamos em ambiente de desenvolvimento
-    const isDevelopment = window.location.hostname === 'localhost' || 
-                         window.location.hostname === '127.0.0.1' ||
-                         window.location.hostname === '';
-    
-    // Usar simulação em desenvolvimento se a API não estiver disponível
-    document.getElementById('save-exam').addEventListener('click', function() {
-        if (isDevelopment) {
-            // Perguntar ao usuário qual método usar
-            if (confirm('Modo desenvolvimento: Deseja simular o salvamento? (Cancelar para tentar API real)')) {
-                simulateSaveExam();
-            } else {
-                saveExam();
-            }
-        } else {
-            saveExam();
-        }
-    });
-});
