@@ -273,6 +273,7 @@ app.post('/api/cadastro-credenciais', (req, res) => {
     }
 });
 
+
 // API - Geração de link único para aluno
 app.post('/api/gerar-link-unico', (req, res) => {
     const { prova_id, aluno_email } = req.body;
@@ -590,6 +591,7 @@ app.post('/api/salvar-prova', (req, res) => {
 });
 
 // Obter provas do aluno via query
+// Rota para obter provas do aluno específico
 app.get('/api/provas/aluno', (req, res) => {
     const alunoEmail = req.query.email || req.headers['x-user-email'];
 
@@ -607,6 +609,62 @@ app.get('/api/provas/aluno', (req, res) => {
                 return res.status(500).json({ error: err.message });
             }
             res.json(rows);
+        }
+    );
+});
+
+// Rota para verificar se o aluno tem acesso a uma prova específica
+app.get('/api/provas/:id/acesso-aluno', (req, res) => {
+    const provaId = req.params.id;
+    const alunoEmail = req.query.email || req.headers['x-user-email'];
+
+    if (!alunoEmail) {
+        return res.status(400).json({ error: 'Email do aluno não fornecido' });
+    }
+
+    db.get(
+        `SELECT pa.* FROM provas_alunos pa 
+         WHERE pa.prova_id = ? AND pa.aluno_email = ?`,
+        [provaId, alunoEmail],
+        (err, row) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (!row) {
+                return res.status(403).json({ 
+                    error: 'Aluno não tem acesso a esta prova' 
+                });
+            }
+
+            // Verificar se a prova ainda está dentro do prazo
+            db.get(
+                `SELECT * FROM provas WHERE id = ?`,
+                [provaId],
+                (err, prova) => {
+                    if (err) {
+                        return res.status(500).json({ error: err.message });
+                    }
+
+                    if (!prova) {
+                        return res.status(404).json({ error: 'Prova não encontrada' });
+                    }
+
+                    const dataLimite = new Date(prova.data_limite);
+                    const agora = new Date();
+
+                    if (agora > dataLimite) {
+                        return res.status(400).json({ 
+                            error: 'Prazo para realização da prova expirado' 
+                        });
+                    }
+
+                    res.json({ 
+                        acessoPermitido: true, 
+                        prova: prova 
+                    });
+                }
+            );
         }
     );
 });
@@ -820,6 +878,103 @@ app.get('/api/provas/:id/resultados', (req, res) => {
                 return res.status(500).json({ error: err.message });
             }
             res.json(rows);
+        }
+    );
+});
+
+// Rota para servir a página individual da prova
+app.get('/prova/:id', (req, res) => {
+    const provaId = req.params.id;
+    
+    // Verificar se o usuário está autenticado
+    const token = req.query.token;
+    if (!token) {
+        return res.status(401).send('Acesso não autorizado. Token necessário.');
+    }
+    
+    // Verificar se o token é válido (implementar lógica de verificação conforme necessário)
+    // Esta é uma verificação básica - adapte conforme sua lógica de autenticação
+    db.get(
+        `SELECT * FROM links_unicos WHERE link_unico = ? AND utilizado = 0`,
+        [token],
+        (err, row) => {
+            if (err) {
+                console.error('Erro ao verificar token:', err);
+                return res.status(500).send('Erro interno do servidor');
+            }
+            
+            if (!row) {
+                return res.status(403).send('Token inválido ou já utilizado');
+            }
+            
+            // Se o token for válido, servir a página da prova
+            res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova.html'));
+        }
+    );
+});
+
+// API - Obter uma prova específica
+app.get('/api/prova/:id', (req, res) => {
+    const provaId = req.params.id;
+    
+    db.get(
+        `SELECT * FROM provas WHERE id = ?`,
+        [provaId],
+        (err, row) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            
+            if (!row) {
+                return res.status(404).json({ error: 'Prova não encontrada' });
+            }
+            
+            // Buscar questões da prova
+            db.all(
+                `SELECT * FROM questoes WHERE prova_id = ? ORDER BY ordem`,
+                [provaId],
+                (err, questions) => {
+                    if (err) {
+                        return res.status(500).json({ error: err.message });
+                    }
+                    
+                    // Para cada questão, buscar alternativas se for múltipla escolha
+                    const questionsWithAlternatives = [];
+                    let processed = 0;
+                    
+                    if (questions.length === 0) {
+                        return res.json({ ...row, questions: [] });
+                    }
+                    
+                    questions.forEach((question, index) => {
+                        if (question.tipo === 'multipla_escolha' || question.tipo === 'verdadeiro_falso') {
+                            db.all(
+                                `SELECT * FROM alternativas WHERE questao_id = ? ORDER BY ordem`,
+                                [question.id],
+                                (err, alternatives) => {
+                                    if (err) {
+                                        console.error('Erro ao buscar alternativas:', err);
+                                    }
+                                    
+                                    questionsWithAlternatives.push({ ...question, alternatives: alternatives || [] });
+                                    processed++;
+                                    
+                                    if (processed === questions.length) {
+                                        res.json({ ...row, questions: questionsWithAlternatives });
+                                    }
+                                }
+                            );
+                        } else {
+                            questionsWithAlternatives.push({ ...question, alternatives: [] });
+                            processed++;
+                            
+                            if (processed === questions.length) {
+                                res.json({ ...row, questions: questionsWithAlternatives });
+                            }
+                        }
+                    });
+                }
+            );
         }
     );
 });

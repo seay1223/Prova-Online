@@ -1,6 +1,6 @@
 const CREDENCIAIS = {
-  alunos: ['samuel.reis@portalsesisp.org.br',
-    'mateus.rodrigues4@portalsesisp.org.br'],
+  alunos: ['mateus.rodrigues4@portalsesisp.org.br',
+    'samuel.reis@portalsesisp.org.br'],
   professores: ['professor@escola.com'],
   senhaPadrao: 'Escolasesi123456'
 };
