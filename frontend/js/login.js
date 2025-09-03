@@ -1,3 +1,4 @@
+// login.js - CORRIGIDO
 document.addEventListener('DOMContentLoaded', function () {
     const loginForm = document.getElementById('loginForm');
 
@@ -70,20 +71,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Gera link único aleatório (token)
                 const linkUnico = gerarLinkUnico(16);
 
-                // Cria objeto de usuário
-                const userComToken = {
+                // Cria objeto de usuário - CORREÇÃO: Salvar com as chaves que aluno.js espera
+                const userData = {
                     email: email,
                     tipo: tipo,
-                    linkUnico: linkUnico
+                    linkUnico: linkUnico,
+                    // Adicionar campos que aluno.js espera
+                    id: email, // Usando email como ID temporário
+                    name: email.split('@')[0] // Nome baseado no email
                 };
 
-                // Salva no localStorage
-                localStorage.setItem('usuarioLogado', JSON.stringify(userComToken));
+                // Salva no localStorage - CORREÇÃO: Usar as chaves corretas
+                localStorage.setItem('userData', JSON.stringify(userData));
+                localStorage.setItem('authToken', linkUnico); // Salvar token separadamente
+                
                 showSuccess('Login realizado com sucesso! Redirecionando...');
 
                 setTimeout(() => {
-                    // Redireciona para o tipo de usuário + token como query string
-                    window.location.href = `/${tipo}?token=${linkUnico}`;
+                    // Redireciona para a página correta
+                    if (tipo === 'aluno') {
+                        window.location.href = '/aluno';
+                    } else {
+                        window.location.href = '/professor';
+                    }
                 }, 1500);
             } else {
                 showError('Email ou senha incorretos. Por favor, tente novamente.');
@@ -91,12 +101,25 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Se já estiver logado, redireciona direto para a página com token
-    const usuarioLogado = localStorage.getItem('usuarioLogado');
-    if (usuarioLogado && window.location.pathname === '/login') {
-        const usuario = JSON.parse(usuarioLogado);
-        if (usuario.tipo && usuario.linkUnico) {
-            window.location.href = `/${usuario.tipo}?token=${usuario.linkUnico}`;
+    // Se já estiver logado, redireciona direto para a página correta - CORREÇÃO
+    const userData = localStorage.getItem('userData');
+    const authToken = localStorage.getItem('authToken');
+    
+    if (userData && authToken && window.location.pathname === '/login') {
+        try {
+            const usuario = JSON.parse(userData);
+            if (usuario.tipo) {
+                if (usuario.tipo === 'aluno') {
+                    window.location.href = '/aluno';
+                } else if (usuario.tipo === 'professor') {
+                    window.location.href = '/professor';
+                }
+            }
+        } catch (e) {
+            console.error('Erro ao parsear userData:', e);
+            // Limpar dados inválidos
+            localStorage.removeItem('userData');
+            localStorage.removeItem('authToken');
         }
     }
 
@@ -119,12 +142,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function showError(mensagem) {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-message';
-        errorDiv.style.color = '#d9534f';
-        errorDiv.style.backgroundColor = '#f2dede';
-        errorDiv.style.padding = '10px';
-        errorDiv.style.borderRadius = '5px';
-        errorDiv.style.marginBottom = '15px';
-        errorDiv.style.border = '1px solid #d43f3a';
+        errorDiv.style.cssText = `
+            color: #d9534f;
+            background-color: #f2dede;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #d43f3a;
+        `;
         errorDiv.textContent = mensagem;
         loginForm.parentNode.insertBefore(errorDiv, loginForm);
     }
@@ -132,12 +157,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function showSuccess(mensagem) {
         const successDiv = document.createElement('div');
         successDiv.className = 'success-message';
-        successDiv.style.color = '#23d160';
-        successDiv.style.backgroundColor = '#e6fffa';
-        successDiv.style.padding = '10px';
-        successDiv.style.borderRadius = '5px';
-        successDiv.style.marginBottom = '15px';
-        successDiv.style.border = '1px solid #23d160';
+        successDiv.style.cssText = `
+            color: #23d160;
+            background-color: #e6fffa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #23d160;
+        `;
         successDiv.textContent = mensagem;
         loginForm.parentNode.insertBefore(successDiv, loginForm);
     }

@@ -1,5 +1,4 @@
-// serverService.js - Serviços de comunicação com o servidor
-
+// serverService.js - Serviços de comunicação com o servidor (CORRIGIDO)
 const API_BASE_URL = 'http://localhost:3000/api';
 
 class ServerService {
@@ -30,12 +29,14 @@ class ServerService {
             if (response.status === 401) {
                 // Token expirado ou inválido
                 localStorage.removeItem('authToken');
+                localStorage.removeItem('userData');
                 window.location.href = '/login';
                 throw new Error('Sessão expirada');
             }
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `Erro HTTP! status: ${response.status}`);
             }
 
             return await response.json();
@@ -47,101 +48,110 @@ class ServerService {
 
     // Operações de autenticação
     async login(email, password, tipo) {
-        const response = await this.request('/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, senha: password, tipo })
-        });
-        
-        if (response.success && response.token) {
-            this.setAuthToken(response.token);
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, senha: password, tipo })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.token) {
+                this.setAuthToken(data.token);
+                // Salvar dados do usuário
+                localStorage.setItem('userData', JSON.stringify(data.user));
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Login error:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Erro ao fazer login' 
+            };
         }
-        
-        return response;
     }
 
     async logout() {
-        await this.request('/logout', { method: 'POST' });
-        localStorage.removeItem('authToken');
-        this.token = null;
+        try {
+            await this.request('/auth/logout', { method: 'POST' });
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userData');
+            this.token = null;
+        }
     }
 
     // Operações de provas
     async saveExam(examData) {
-        return await this.request('/exams', {
-            method: 'POST',
-            body: JSON.stringify(examData)
-        });
+        try {
+            return await this.request('/exams', {
+                method: 'POST',
+                body: JSON.stringify({
+                    ...examData,
+                    published: true,
+                    createdAt: new Date().toISOString()
+                })
+            });
+        } catch (error) {
+            console.error('Save exam error:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Erro ao salvar prova' 
+            };
+        }
     }
 
-    async updateExam(examId, examData) {
-        return await this.request(`/exams/${examId}`, {
-            method: 'PUT',
-            body: JSON.stringify(examData)
-        });
-    }
-
-    async getExams() {
-        return await this.request('/exams');
+    async getAvailableExams() {
+        try {
+            return await this.request('/exams/available');
+        } catch (error) {
+            console.error('Get available exams error:', error);
+            return [];
+        }
     }
 
     async getExam(examId) {
-        return await this.request(`/exams/${examId}`);
+        try {
+            return await this.request(`/exams/${examId}`);
+        } catch (error) {
+            console.error('Get exam error:', error);
+            return null;
+        }
     }
 
-    async deleteExam(examId) {
-        return await this.request(`/exams/${examId}`, {
-            method: 'DELETE'
-        });
+    // Verificar se o aluno já realizou a prova (CORREÇÃO)
+    async checkExamAttempt(examId, studentId) {
+        try {
+            const response = await this.request(`/exams/${examId}/attempt/${studentId}`);
+            return response;
+        } catch (error) {
+            console.error('Check exam attempt error:', error);
+            return { attempted: false, error: error.message };
+        }
     }
 
-    // Operações de questões
-    async addQuestion(examId, questionData) {
-        return await this.request(`/exams/${examId}/questions`, {
-            method: 'POST',
-            body: JSON.stringify(questionData)
-        });
-    }
-
-    async updateQuestion(examId, questionId, questionData) {
-        return await this.request(`/exams/${examId}/questions/${questionId}`, {
-            method: 'PUT',
-            body: JSON.stringify(questionData)
-        });
-    }
-
-    async deleteQuestion(examId, questionId) {
-        return await this.request(`/exams/${examId}/questions/${questionId}`, {
-            method: 'DELETE'
-        });
-    }
-
-    // Operações de alunos
-    async assignStudents(examId, students) {
-        return await this.request(`/exams/${examId}/students`, {
-            method: 'POST',
-            body: JSON.stringify({ students })
-        });
-    }
-
-    async getExamResults(examId) {
-        return await this.request(`/exams/${examId}/results`);
-    }
-
-    // Upload de arquivos
-    async uploadFile(file, examId) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('examId', examId);
-
-        return await this.request('/upload', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.token}`
-            },
-            body: formData
-        });
+    // Enviar respostas da prova
+    async submitExamAnswers(examId, answers) {
+        try {
+            return await this.request(`/exams/${examId}/submit`, {
+                method: 'POST',
+                body: JSON.stringify({ answers })
+            });
+        } catch (error) {
+            console.error('Submit exam error:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Erro ao enviar respostas' 
+            };
+        }
     }
 }
 
 // Instância singleton
-export const serverService = new ServerService();
+window.serverService = new ServerService();
