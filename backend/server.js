@@ -8,7 +8,8 @@ import crypto from 'crypto';
 import db from './database/database.js';
 
 // Configuração do __dirname para ESM
-const __filename = fileURLToPath(import.meta.url);
+const __filename = fileURLToPath(
+    import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
@@ -27,7 +28,7 @@ app.use((req, res, next) => {
 // ===== SERVIÇO DE ARQUIVOS ESTÁTICOS =====
 const staticPaths = [
     '/css',
-    '/js', 
+    '/js',
     '/images',
     '/aluno',
     '/professor',
@@ -52,27 +53,27 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 const processingQueue = {
     tasks: [],
     isProcessing: false,
-    
+
     add(task) {
         this.tasks.push(task);
         if (!this.isProcessing) this.process();
     },
-    
+
     async process() {
         if (this.tasks.length === 0) {
             this.isProcessing = false;
             return;
         }
-        
+
         this.isProcessing = true;
         const task = this.tasks.shift();
-        
+
         try {
             await task();
         } catch (error) {
             console.error('Erro no processamento:', error);
         }
-        
+
         setTimeout(() => this.process(), 100);
     }
 };
@@ -84,27 +85,27 @@ function batchInsert(table, columns, data, batchSize = 50) {
         for (let i = 0; i < data.length; i += batchSize) {
             batches.push(data.slice(i, i + batchSize));
         }
-        
+
         let processed = 0;
         const processBatch = (batch) => {
             if (!batch || batch.length === 0) {
                 resolve();
                 return;
             }
-            
+
             const placeholders = batch.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
             const values = batch.flat();
             const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${placeholders}`;
-            
+
             db.run(sql, values, function(err) {
                 if (err) return reject(err);
-                
+
                 processed += batch.length;
                 console.log(`Inseridos ${processed}/${data.length} registros em ${table}`);
                 setTimeout(() => processBatch(batches.shift()), 50);
             });
         };
-        
+
         processBatch(batches.shift());
     });
 }
@@ -163,7 +164,7 @@ app.get('/termos', (req, res) => {
 app.get('/professor/:page.html', (req, res) => {
     const page = req.params.page;
     const filePath = path.join(__dirname, `../frontend/professor/${page}/${page}.html`);
-    
+
     if (fs.existsSync(filePath)) {
         res.sendFile(filePath);
     } else {
@@ -171,15 +172,15 @@ app.get('/professor/:page.html', (req, res) => {
     }
 });
 
-// Rota curinga para arquivos HTML
+// Rota curinga para arquivos HTML - DEVE SER A ÚLTIMA ROTA
 app.get('*.html', (req, res) => {
     const requestedPath = req.path;
     const filePath = path.join(__dirname, '../frontend', requestedPath);
-    
+
     if (fs.existsSync(filePath)) {
         res.sendFile(filePath);
     } else {
-        res.status(404).json({ 
+        res.status(404).json({
             error: 'Página não encontrada',
             path: requestedPath,
             method: req.method
@@ -189,55 +190,103 @@ app.get('*.html', (req, res) => {
 
 // ===== API ROUTES =====
 
-// API - Autenticação
+// API - Autenticação (CORRIGIDA)
 app.post('/api/auth/login', (req, res) => {
-    const { email, senha, tipo } = req.body;
+    const { email, senha, tipo, turma } = req.body;
 
     try {
         const credenciaisPath = path.join(__dirname, '../frontend/js/credenciais.js');
-        
+
         if (!fs.existsSync(credenciaisPath)) {
-            return res.status(500).json({ 
-                success: false, 
-                message: 'Sistema em configuração' 
+            return res.status(500).json({
+                success: false,
+                message: 'Sistema em configuração'
             });
         }
 
         const fileContent = fs.readFileSync(credenciaisPath, 'utf8');
-        
-        // Extrair credenciais
-        const alunosMatch = fileContent.match(/alunos:\s*\[([^\]]+)\]/);
-        const professoresMatch = fileContent.match(/professores:\s*\[([^\]]+)\]/);
-        const senhaMatch = fileContent.match(/senhaPadrao:\s*'([^']+)'/);
-        
+
+        // Extrair credenciais usando regex mais robusta
+        const alunosMatch = fileContent.match(/alunos:\s*(\[[^\]]*\])/);
+        const professoresMatch = fileContent.match(/professores:\s*(\[[^\]]*\])/);
+        const senhaMatch = fileContent.match(/senhaPadrao:\s*['"]([^'"]+)['"]/);
+
         if (!alunosMatch || !professoresMatch || !senhaMatch) {
-            return res.status(500).json({ 
-                success: false, 
-                message: 'Configuração inválida' 
+            return res.status(500).json({
+                success: false,
+                message: 'Configuração inválida'
             });
         }
-        
-        const alunos = alunosMatch[1].split(',').map(e => e.trim().replace(/['"]/g, ''));
-        const professores = professoresMatch[1].split(',').map(e => e.trim().replace(/['"]/g, ''));
+
+        // Processar alunos
+        let alunos = [];
+        try {
+            const alunosStr = alunosMatch[1].replace(/(\w+):/g, '"$1":').replace(/'/g, '"');
+            alunos = JSON.parse(alunosStr);
+        } catch (e) {
+            console.error('Erro ao processar alunos:', e);
+            return res.status(500).json({
+                success: false,
+                message: 'Formato de alunos inválido'
+            });
+        }
+
+        // Processar professores
+        let professores = [];
+        try {
+            const professoresStr = professoresMatch[1].replace(/'/g, '"');
+            professores = JSON.parse(professoresStr);
+        } catch (e) {
+            console.error('Erro ao processar professores:', e);
+            return res.status(500).json({
+                success: false,
+                message: 'Formato de professores inválido'
+            });
+        }
+
         const senhaPadrao = senhaMatch[1];
-        
+
         // Verificar credenciais
         let isValid = false;
+        let userData = {};
+
         if (tipo === 'aluno') {
-            isValid = alunos.includes(email) && senha === senhaPadrao;
+            const aluno = alunos.find(a => a.email === email);
+            isValid = aluno && senha === senhaPadrao;
+
+            if (isValid) {
+                // Verificar se a turma coincide
+                if (aluno.turma !== turma) {
+                    return res.status(401).json({
+                        success: false,
+                        message: `Você não está cadastrado na turma ${turma}. Sua turma é ${aluno.turma}.`
+                    });
+                }
+
+                userData = {
+                    id: email,
+                    email: email,
+                    name: email.split('@')[0],
+                    tipo: tipo,
+                    turma: aluno.turma
+                };
+            }
         } else if (tipo === 'professor') {
             isValid = professores.includes(email) && senha === senhaPadrao;
+
+            if (isValid) {
+                userData = {
+                    id: email,
+                    email: email,
+                    name: email.split('@')[0],
+                    tipo: tipo
+                };
+            }
         }
-        
+
         if (isValid) {
             const token = crypto.randomBytes(32).toString('hex');
-            const userData = {
-                id: email,
-                email: email,
-                name: email.split('@')[0],
-                tipo: tipo
-            };
-            
+
             res.json({
                 success: true,
                 message: 'Login realizado com sucesso!',
@@ -250,7 +299,7 @@ app.post('/api/auth/login', (req, res) => {
                 message: 'Credenciais inválidas'
             });
         }
-        
+
     } catch (error) {
         console.error('Erro no login:', error);
         res.status(500).json({
@@ -265,8 +314,7 @@ app.post('/api/login', (req, res) => {
     const { email, senha, tipo } = req.body;
 
     db.get(
-        `SELECT * FROM usuarios WHERE email = ? AND tipo = ?`,
-        [email, tipo],
+        `SELECT * FROM usuarios WHERE email = ? AND tipo = ?`, [email, tipo],
         (err, row) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
@@ -274,8 +322,8 @@ app.post('/api/login', (req, res) => {
 
             if (row) {
                 if (senha === row.senha) {
-                    return res.json({ 
-                        success: true, 
+                    return res.json({
+                        success: true,
                         message: 'Login realizado com sucesso!',
                         user: { email, tipo }
                     });
@@ -291,12 +339,13 @@ app.post('/api/login', (req, res) => {
 
 // API - Provas Disponíveis
 app.get('/api/exams/available', (req, res) => {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
+    const authHeader = req.headers.authorization;
+    const token = authHeader ? authHeader.replace('Bearer ', '') : null;
+
     if (!token) {
         return res.status(401).json({ error: 'Token não fornecido' });
     }
-    
+
     db.all(
         `SELECT p.* 
          FROM provas p 
@@ -315,11 +364,10 @@ app.get('/api/exams/available', (req, res) => {
 // API - Verificar tentativa de prova
 app.get('/api/exams/:examId/attempt/:studentId', (req, res) => {
     const { examId, studentId } = req.params;
-    
+
     db.get(
         `SELECT COUNT(*) as count FROM respostas 
-         WHERE prova_id = ? AND aluno_email = ?`,
-        [examId, studentId],
+         WHERE prova_id = ? AND aluno_email = ?`, [examId, studentId],
         (err, row) => {
             if (err) {
                 console.error('Erro ao verificar tentativa:', err);
@@ -343,39 +391,39 @@ app.get('/api/exams', (req, res) => {
 // API - Prova específica
 app.get('/api/exams/:id', (req, res) => {
     const examId = req.params.id;
-    
+
     db.get('SELECT * FROM provas WHERE id = ?', [examId], (err, exam) => {
         if (err) {
             return res.status(500).json({ error: err.message });
         }
-        
+
         if (!exam) {
             return res.status(404).json({ error: 'Prova não encontrada' });
         }
-        
+
         db.all('SELECT * FROM questoes WHERE prova_id = ?', [examId], (err, questions) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            
+
             const questionsWithAlternatives = [];
             let processed = 0;
-            
+
             if (questions.length === 0) {
-                return res.json({ ...exam, questions: [] });
+                return res.json({...exam, questions: [] });
             }
-            
+
             questions.forEach((question, index) => {
                 db.all('SELECT * FROM alternativas WHERE questao_id = ?', [question.id], (err, alternatives) => {
                     if (err) {
                         console.error('Erro ao buscar alternativas:', err);
                     }
-                    
-                    questionsWithAlternatives.push({ ...question, alternatives: alternatives || [] });
+
+                    questionsWithAlternatives.push({...question, alternatives: alternatives || [] });
                     processed++;
-                    
+
                     if (processed === questions.length) {
-                        res.json({ ...exam, questions: questionsWithAlternatives });
+                        res.json({...exam, questions: questionsWithAlternatives });
                     }
                 });
             });
@@ -385,39 +433,44 @@ app.get('/api/exams/:id', (req, res) => {
 
 // API - Cadastro de usuários
 app.post('/api/cadastro-credenciais', (req, res) => {
-    const { email, senha, tipo } = req.body;
+    const { email, senha, tipo, turma } = req.body;
 
     try {
         const credenciaisPath = path.join(__dirname, '../frontend/js/credenciais.js');
-        
+
         if (!fs.existsSync(credenciaisPath)) {
-            return res.status(500).json({ 
-                success: false, 
-                message: 'Arquivo de credenciais não encontrado' 
+            return res.status(500).json({
+                success: false,
+                message: 'Arquivo de credenciais não encontrado'
             });
         }
-        
+
         let fileContent = fs.readFileSync(credenciaisPath, 'utf8');
-        
+
+        // Verificar se o email já existe
         if (fileContent.includes(email)) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Usuário já cadastrado' 
+            return res.status(400).json({
+                success: false,
+                message: 'Usuário já cadastrado'
             });
         }
-        
+
+        // Extrair a posição dos arrays
         const alunosIndex = fileContent.indexOf('alunos: [');
         const professoresIndex = fileContent.indexOf('professores: [');
-        
+
         if (tipo === 'aluno' && alunosIndex !== -1) {
             const alunosEndIndex = fileContent.indexOf(']', alunosIndex);
             if (alunosEndIndex !== -1) {
                 const before = fileContent.substring(0, alunosEndIndex);
                 const after = fileContent.substring(alunosEndIndex);
-                const hasExistingAlunos = before.includes("'") || before.includes('"');
-                const comma = hasExistingAlunos ? ',' : '';
-                
-                fileContent = before + comma + `\n    '${email}'` + after;
+
+                // Verificar se já existem alunos cadastrados
+                const hasExistingAlunos = before.substring(alunosIndex).includes('{');
+                const separator = hasExistingAlunos ? ',' : '';
+
+                // Adicionar aluno com turma
+                fileContent = before + separator + `\n    { email: '${email}', turma: '${turma}' }` + after;
             }
         } else if (tipo === 'professor' && professoresIndex !== -1) {
             const professoresEndIndex = fileContent.indexOf(']', professoresIndex);
@@ -426,28 +479,28 @@ app.post('/api/cadastro-credenciais', (req, res) => {
                 const after = fileContent.substring(professoresEndIndex);
                 const hasExistingProfessores = before.includes("'") || before.includes('"');
                 const comma = hasExistingProfessores ? ',' : '';
-                
+
                 fileContent = before + comma + `\n    '${email}'` + after;
             }
         } else {
-            return res.status(500).json({ 
-                success: false, 
-                message: 'Estrutura do arquivo de credenciais inválida' 
+            return res.status(500).json({
+                success: false,
+                message: 'Estrutura do arquivo de credenciais inválida'
             });
         }
-        
+
         fs.writeFileSync(credenciaisPath, fileContent);
-        
-        res.json({ 
-            success: true, 
-            message: 'Usuário cadastrado com sucesso!' 
+
+        res.json({
+            success: true,
+            message: 'Usuário cadastrado com sucesso!'
         });
-        
+
     } catch (error) {
         console.error('Erro ao atualizar credenciais:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Erro interno do servidor' 
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno do servidor'
         });
     }
 });
@@ -457,8 +510,7 @@ app.post('/api/gerar-link-unico', (req, res) => {
     const { prova_id, aluno_email } = req.body;
 
     db.get(
-        `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_email = ?`,
-        [prova_id, aluno_email],
+        `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_email = ?`, [prova_id, aluno_email],
         (err, row) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
@@ -473,8 +525,7 @@ app.post('/api/gerar-link-unico', (req, res) => {
                 const linkUnico = uuidv4();
 
                 db.run(
-                    `INSERT INTO links_unicos (prova_id, aluno_email, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`,
-                    [prova_id, aluno_email, linkUnico],
+                    `INSERT INTO links_unicos (prova_id, aluno_email, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, [prova_id, aluno_email, linkUnico],
                     function(err) {
                         if (err) {
                             return res.status(500).json({ error: err.message });
@@ -491,15 +542,14 @@ app.post('/api/gerar-link-unico', (req, res) => {
 });
 
 // API - CRUD Provas
-app.post('/api/provas', async (req, res) => {
+app.post('/api/provas', async(req, res) => {
     const { titulo, disciplina, data_limite, tempo_limite, descricao, questões, alunos } = req.body;
     const provaId = uuidv4();
 
     try {
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [provaId, titulo, disciplina, 'professor@escola.com', data_limite, tempo_limite, descricao],
+                `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, titulo, disciplina, 'professor@escola.com', data_limite, tempo_limite, descricao],
                 function(err) {
                     if (err) reject(err);
                     else resolve();
@@ -507,28 +557,28 @@ app.post('/api/provas', async (req, res) => {
             );
         });
 
-        res.json({ 
-            id: provaId, 
-            message: 'Prova criada com sucesso! Processamento em segundo plano iniciado.' 
+        res.json({
+            id: provaId,
+            message: 'Prova criada com sucesso! Processamento em segundo plano iniciado.'
         });
 
-        processingQueue.add(async () => {
+        processingQueue.add(async() => {
             try {
                 if (questões && questões.length > 0) {
                     const questaoData = [];
                     const alternativaData = [];
-                    
+
                     questões.forEach((questao, index) => {
                         const questaoId = uuidv4();
                         questaoData.push([
-                            questaoId, 
-                            provaId, 
-                            questao.tipo, 
-                            questao.enunciado, 
-                            questao.valor || 1.0, 
+                            questaoId,
+                            provaId,
+                            questao.tipo,
+                            questao.enunciado,
+                            questao.valor || 1.0,
                             index
                         ]);
-                        
+
                         if (questao.tipo === 'multipla_escolha' && questao.alternativas) {
                             questao.alternativas.forEach((alt, altIndex) => {
                                 alternativaData.push([
@@ -556,25 +606,23 @@ app.post('/api/provas', async (req, res) => {
                             ]);
                         }
                     });
-                    
-                    await batchInsert('questoes', 
-                        ['id', 'prova_id', 'tipo', 'enunciado', 'valor', 'ordem'], 
+
+                    await batchInsert('questoes', ['id', 'prova_id', 'tipo', 'enunciado', 'valor', 'ordem'],
                         questaoData
                     );
-                    
+
                     if (alternativaData.length > 0) {
-                        await batchInsert('alternativas', 
-                            ['id', 'questao_id', 'texto', 'correta', 'ordem'], 
+                        await batchInsert('alternativas', ['id', 'questao_id', 'texto', 'correta', 'ordem'],
                             alternativaData
                         );
                     }
                 }
-                
+
                 if (alunos && alunos.length > 0) {
                     const alunoData = alunos.map(email => [provaId, email]);
                     await batchInsert('provas_alunos', ['prova_id', 'aluno_email'], alunoData);
                 }
-                
+
                 console.log(`Prova ${provaId} processada completamente em segundo plano`);
             } catch (error) {
                 console.error('Erro no processamento em segundo plano:', error);
@@ -589,13 +637,13 @@ app.post('/api/provas', async (req, res) => {
 // API - Salvar prova (compatibilidade)
 app.post('/api/salvar-prova', (req, res) => {
     const { title, description, duration, exam_date, questions } = req.body;
-    
+
     console.log('Recebendo dados da prova:', { title, description, duration, exam_date, questions });
 
     if (!title || !duration || !exam_date) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'Título, duração e data são obrigatórios' 
+        return res.status(400).json({
+            success: false,
+            message: 'Título, duração e data são obrigatórios'
         });
     }
 
@@ -605,53 +653,50 @@ app.post('/api/salvar-prova', (req, res) => {
     db.serialize(() => {
         db.run(
             `INSERT INTO provas (id, titulo, disciplina, professor_id, data_limite, tempo_limite, descricao) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [uuidv4(), title, 'Geral', 'professor@escola.com', isoDate, duration, description || ''],
+             VALUES (?, ?, ?, ?, ?, ?, ?)`, [uuidv4(), title, 'Geral', 'professor@escola.com', isoDate, duration, description || ''],
             function(err) {
                 if (err) {
                     console.error('Erro ao inserir prova:', err);
-                    return res.status(500).json({ 
-                        success: false, 
-                        message: 'Erro ao salvar prova: ' + err.message 
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Erro ao salvar prova: ' + err.message
                     });
                 }
-                
+
                 const provaId = this.lastID ? this.lastID : uuidv4();
-                
+
                 if (questions && questions.length > 0) {
                     let questionsProcessed = 0;
-                    
+
                     questions.forEach((question, index) => {
                         const questaoId = uuidv4();
-                        
+
                         db.run(
                             `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) 
-                             VALUES (?, ?, ?, ?, ?, ?)`,
-                            [questaoId, provaId, question.type, question.text, question.value || 1.0, index],
+                             VALUES (?, ?, ?, ?, ?, ?)`, [questaoId, provaId, question.type, question.text, question.value || 1.0, index],
                             function(err) {
                                 if (err) {
                                     console.error('Erro ao inserir questão:', err);
                                     return;
                                 }
-                                
-                                if ((question.type === 'multipla_escolha' || question.type === 'verdadeiro_falso') && 
+
+                                if ((question.type === 'multipla_escolha' || question.type === 'verdadeiro_falso') &&
                                     question.alternatives) {
-                                    
+
                                     question.alternatives.forEach((alternative, altIndex) => {
-                                        const isCorrect = question.type === 'verdadeiro_falso' 
-                                            ? alternative === question.correctAnswer
-                                            : altIndex === question.correctAnswer;
-                                        
+                                        const isCorrect = question.type === 'verdadeiro_falso' ?
+                                            alternative === question.correctAnswer :
+                                            altIndex === question.correctAnswer;
+
                                         db.run(
                                             `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) 
-                                             VALUES (?, ?, ?, ?, ?)`,
-                                            [uuidv4(), questaoId, alternative, isCorrect ? 1 : 0, altIndex]
+                                             VALUES (?, ?, ?, ?, ?)`, [uuidv4(), questaoId, alternative, isCorrect ? 1 : 0, altIndex]
                                         );
                                     });
                                 }
-                                
+
                                 questionsProcessed++;
-                                
+
                                 if (questionsProcessed === questions.length) {
                                     res.json({
                                         success: true,
@@ -682,8 +727,7 @@ app.get('/acesso-unico/:linkUnico', (req, res) => {
         `SELECT lu.*, p.titulo, p.data_limite 
          FROM links_unicos lu 
          JOIN provas p ON lu.prova_id = p.id 
-         WHERE lu.link_unico = ? AND lu.utilizado = 0`,
-        [linkUnico],
+         WHERE lu.link_unico = ? AND lu.utilizado = 0`, [linkUnico],
         (err, row) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
@@ -701,8 +745,7 @@ app.get('/acesso-unico/:linkUnico', (req, res) => {
             }
 
             db.run(
-                `UPDATE links_unicos SET utilizado = 1, data_utilizacao = datetime('now') WHERE link_unico = ?`,
-                [linkUnico],
+                `UPDATE links_unicos SET utilizado = 1, data_utilizacao = datetime('now') WHERE link_unico = ?`, [linkUnico],
                 function(err) {
                     if (err) {
                         console.error('Erro ao marcar link como utilizado:', err);
@@ -718,14 +761,14 @@ app.get('/acesso-unico/:linkUnico', (req, res) => {
 app.get('/prova/:id', (req, res) => {
     const provaId = req.params.id;
     const token = req.query.token;
-    
+
     if (!token) {
         return res.status(401).send('Acesso não autorizado. Token necessário.');
     }
-    
+
     // Verificação simplificada do token
     console.log('Acesso à prova:', provaId, 'com token:', token);
-    
+
     // Servir a página da prova
     res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova.html'));
 });
