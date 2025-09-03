@@ -1,293 +1,493 @@
-// Variáveis globais
-let examData = {
-    title: '',
-    description: '',
-    duration: 60,
-    date: '',
-    questions: []
+// criarprova.js
+// Gerencia a criação de provas no sistema - Versão independente
+
+class Question {
+    constructor(data) {
+        this.text = data.text || '';
+        this.type = data.type || 'multiple';
+        this.alternatives = data.alternatives || [];
+        this.correctAnswer = data.correctAnswer !== undefined ? data.correctAnswer : null;
+    }
+}
+
+const QuestionType = {
+    MULTIPLE: 'multiple',
+    TRUEFALSE: 'truefalse',
+    ESSAY: 'essay'
 };
 
-let alternativeCount = 2; // Inicia com 2 alternativas
-
-// Inicialização quando o DOM estiver carregado
-document.addEventListener('DOMContentLoaded', function() {
-    // Configurar data mínima para hoje
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('exam-date').setAttribute('min', today);
-    
-    // Adicionar event listeners
-    document.getElementById('add-alternative').addEventListener('click', addAlternative);
-    document.getElementById('add-question').addEventListener('click', addQuestion);
-    document.getElementById('save-exam').addEventListener('click', saveExam);
-    document.getElementById('question-type').addEventListener('change', toggleAlternatives);
-    
-    // Adicionar listeners para remover alternativas
-    document.querySelectorAll('.remove-alternative').forEach(button => {
-        button.addEventListener('click', function() {
-            if (document.querySelectorAll('.alternative-item').length > 2) {
-                this.parentElement.remove();
-            } else {
-                alert('A questão deve ter pelo menos 2 alternativas.');
-            }
-        });
+// Funções de serviço do servidor (simuladas)
+async function saveExam(examData) {
+    console.log('Salvando prova:', examData);
+    // Simula uma requisição ao servidor
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve({ success: true, message: 'Prova salva com sucesso!' });
+        }, 1000);
     });
-    
-    // Inicializar a visibilidade das alternativas
-    toggleAlternatives();
-});
+}
 
-// Função para adicionar alternativa
-function addAlternative() {
-    const alternativesContainer = document.getElementById('alternatives-container');
-    const newAlternative = document.createElement('div');
-    newAlternative.className = 'alternative-item';
+async function updateExam(examData) {
+    console.log('Atualizando prova:', examData);
+    // Simula uma requisição ao servidor
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve({ success: true, message: 'Prova atualizada com sucesso!' });
+        }, 1000);
+    });
+}
+
+// Funções de interface do usuário
+function showNotification(message, type) {
+    // Remove notificações existentes
+    clearNotifications();
     
-    const letter = String.fromCharCode(65 + alternativeCount); // A, B, C, etc.
-    
-    newAlternative.innerHTML = `
-        <input type="radio" name="correct-answer" value="${alternativeCount}">
-        <input type="text" placeholder="Alternativa ${letter}">
-        <button class="btn-danger remove-alternative">X</button>
+    // Cria a nova notificação
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px;
+        border-radius: 5px;
+        color: white;
+        z-index: 1000;
+        ${type === 'success' ? 'background-color: #4CAF50;' : ''}
+        ${type === 'error' ? 'background-color: #f44336;' : ''}
+        ${type === 'info' ? 'background-color: #2196F3;' : ''}
     `;
     
-    alternativesContainer.insertBefore(newAlternative, document.getElementById('add-alternative'));
+    document.body.appendChild(notification);
     
-    // Adicionar listener para o botão de remover
-    newAlternative.querySelector('.remove-alternative').addEventListener('click', function() {
-        if (document.querySelectorAll('.alternative-item').length > 2) {
-            this.parentElement.remove();
-        } else {
-            alert('A questão deve ter pelo menos 2 alternativas.');
+    // Remove a notificação após 3 segundos
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 3000);
+}
+
+function clearNotifications() {
+    const notifications = document.querySelectorAll('.notification');
+    notifications.forEach(notification => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
         }
     });
-    
-    alternativeCount++;
 }
 
-// Função para alternar a visibilidade das alternativas
-function toggleAlternatives() {
-    const questionType = document.getElementById('question-type').value;
-    const alternativesContainer = document.getElementById('alternatives-container');
-    
-    if (questionType === 'multiple' || questionType === 'truefalse') {
-        alternativesContainer.style.display = 'block';
+class ExamCreator {
+    constructor() {
+        this.examData = {
+            title: '',
+            description: '',
+            duration: 60,
+            date: '',
+            questions: []
+        };
         
-        // Se for verdadeiro/falso, criar opções específicas
-        if (questionType === 'truefalse') {
-            alternativesContainer.innerHTML = `
-                <h4>Alternativas</h4>
-                <div class="alternative-item">
-                    <input type="radio" name="correct-answer" value="0">
-                    <input type="text" value="Verdadeiro" readonly>
-                    <button class="btn-danger remove-alternative" disabled>X</button>
-                </div>
-                <div class="alternative-item">
-                    <input type="radio" name="correct-answer" value="1">
-                    <input type="text" value="Falso" readonly>
-                    <button class="btn-danger remove-alternative" disabled>X</button>
-                </div>
-            `;
-        }
-    } else {
-        alternativesContainer.style.display = 'none';
+        this.currentQuestion = null;
+        this.init();
     }
-}
 
-// Função para adicionar questão
-function addQuestion() {
-    const questionText = document.getElementById('question-text').value.trim();
-    const questionType = document.getElementById('question-type').value;
-    
-    if (!questionText) {
-        alert('Por favor, digite o enunciado da questão.');
-        return;
+    init() {
+        this.setupEventListeners();
+        this.setMinDate();
+        this.toggleAlternatives('multiple'); // Inicializar com o tipo padrão
+        this.loadDraft(); // Carregar rascunho salvo, se existir
     }
-    
-    let alternatives = [];
-    let correctAnswer = -1;
-    
-    // Coletar alternativas para questões de múltipla escolha
-    if (questionType === 'multiple' || questionType === 'truefalse') {
-        const alternativeItems = document.querySelectorAll('.alternative-item');
+
+    setupEventListeners() {
+        // Configurações da prova
+        document.getElementById('exam-title').addEventListener('input', (e) => {
+            this.examData.title = e.target.value;
+            this.saveDraft();
+        });
+
+        document.getElementById('exam-description').addEventListener('input', (e) => {
+            this.examData.description = e.target.value;
+            this.saveDraft();
+        });
+
+        document.getElementById('exam-time').addEventListener('input', (e) => {
+            this.examData.duration = parseInt(e.target.value) || 60;
+            this.saveDraft();
+        });
+
+        document.getElementById('exam-date').addEventListener('change', (e) => {
+            this.examData.date = e.target.value;
+            this.saveDraft();
+        });
+
+        // Gerenciamento de questões
+        document.getElementById('add-question').addEventListener('click', () => {
+            this.addQuestion();
+        });
+
+        document.getElementById('question-type').addEventListener('change', (e) => {
+            this.toggleAlternatives(e.target.value);
+        });
+
+        document.getElementById('save-exam').addEventListener('click', () => {
+            this.saveExam();
+        });
+
+        // Delegation para botões de remover alternativa
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-alternative')) {
+                this.removeAlternative(e.target);
+            }
+        });
+    }
+
+    setMinDate() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('exam-date').setAttribute('min', today);
+    }
+
+    toggleAlternatives(type) {
+        const alternativesContainer = document.getElementById('alternatives-container');
         
-        alternativeItems.forEach((item, index) => {
-            const textInput = item.querySelector('input[type="text"]');
-            const radioInput = item.querySelector('input[type="radio"]');
+        if (type === 'multiple' || type === 'truefalse') {
+            alternativesContainer.style.display = 'block';
             
-            if (textInput.value.trim()) {
-                alternatives.push(textInput.value.trim());
-                
-                if (radioInput.checked) {
-                    correctAnswer = index;
-                }
-            }
-        });
-        
-        if (alternatives.length < 2) {
-            alert('A questão deve ter pelo menos 2 alternativas.');
-            return;
-        }
-        
-        if (correctAnswer === -1) {
-            alert('Por favor, selecione a alternativa correta.');
-            return;
-        }
-    }
-    
-    // Criar objeto da questão
-    const question = {
-        id: Date.now(), // ID único baseado no timestamp
-        text: questionText,
-        type: questionType,
-        alternatives: alternatives,
-        correctAnswer: correctAnswer
-    };
-    
-    // Adicionar à lista de questões
-    examData.questions.push(question);
-    
-    // Atualizar a exibição
-    displayQuestions();
-    
-    // Limpar o formulário
-    document.getElementById('question-text').value = '';
-    document.getElementById('question-type').value = 'multiple';
-    
-    // Resetar alternativas
-    resetAlternatives();
-    toggleAlternatives();
-}
-
-// Função para resetar as alternativas
-function resetAlternatives() {
-    alternativeCount = 2;
-    const alternativesContainer = document.getElementById('alternatives-container');
-    alternativesContainer.innerHTML = `
-        <h4>Alternativas</h4>
-        <div class="alternative-item">
-            <input type="radio" name="correct-answer" value="0">
-            <input type="text" placeholder="Alternativa A">
-            <button class="btn-danger remove-alternative">X</button>
-        </div>
-        <div class="alternative-item">
-            <input type="radio" name="correct-answer" value="1">
-            <input type="text" placeholder="Alternativa B">
-            <button class="btn-danger remove-alternative">X</button>
-        </div>
-        <button class="btn-secondary" id="add-alternative">+ Adicionar Alternativa</button>
-    `;
-    
-    // Re-adicionar event listeners
-    document.getElementById('add-alternative').addEventListener('click', addAlternative);
-    document.querySelectorAll('.remove-alternative').forEach(button => {
-        button.addEventListener('click', function() {
-            if (document.querySelectorAll('.alternative-item').length > 2) {
-                this.parentElement.remove();
+            if (type === 'truefalse') {
+                this.setupTrueFalseAlternatives();
             } else {
-                alert('A questão deve ter pelo menos 2 alternativas.');
+                this.setupMultipleChoiceAlternatives();
             }
-        });
-    });
-}
-
-// Função para exibir as questões
-function displayQuestions() {
-    const questionsContainer = document.getElementById('questions-container');
-    questionsContainer.innerHTML = '';
-    
-    if (examData.questions.length === 0) {
-        questionsContainer.innerHTML = '<p class="no-questions">Nenhuma questão adicionada ainda.</p>';
-        return;
+        } else {
+            alternativesContainer.style.display = 'none';
+        }
     }
-    
-    examData.questions.forEach((question, index) => {
-        const questionElement = document.createElement('div');
-        questionElement.className = 'question-item';
-        questionElement.dataset.id = question.id;
+
+    setupTrueFalseAlternatives() {
+        const container = document.getElementById('alternatives-container');
+        container.innerHTML = `
+            <div class="alternative-item">
+                <input type="radio" name="correct-answer" value="0" required>
+                <input type="text" value="Verdadeiro" readonly>
+                <button class="btn-danger remove-alternative" disabled>X</button>
+            </div>
+            <div class="alternative-item">
+                <input type="radio" name="correct-answer" value="1" required>
+                <input type="text" value="Falso" readonly>
+                <button class="btn-danger remove-alternative" disabled>X</button>
+            </div>
+        `;
+    }
+
+    setupMultipleChoiceAlternatives() {
+        const container = document.getElementById('alternatives-container');
+        container.innerHTML = `
+            <div class="alternative-item">
+                <input type="radio" name="correct-answer" value="0" required>
+                <input type="text" placeholder="Alternativa A" required>
+                <button class="btn-danger remove-alternative">X</button>
+            </div>
+            <div class="alternative-item">
+                <input type="radio" name="correct-answer" value="1" required>
+                <input type="text" placeholder="Alternativa B" required>
+                <button class="btn-danger remove-alternative">X</button>
+            </div>
+            <button type="button" class="btn-secondary" id="add-alternative-btn">+ Adicionar Alternativa</button>
+        `;
+
+        document.getElementById('add-alternative-btn').addEventListener('click', () => {
+            this.addAlternative();
+        });
+    }
+
+    addAlternative() {
+        const container = document.getElementById('alternatives-container');
+        const alternativeCount = document.querySelectorAll('.alternative-item').length;
+        const letter = String.fromCharCode(65 + alternativeCount);
         
+        const newAlternative = document.createElement('div');
+        newAlternative.className = 'alternative-item';
+        newAlternative.innerHTML = `
+            <input type="radio" name="correct-answer" value="${alternativeCount}">
+            <input type="text" placeholder="Alternativa ${letter}" required>
+            <button class="btn-danger remove-alternative">X</button>
+        `;
+        
+        // Inserir antes do botão de adicionar
+        const addButton = document.getElementById('add-alternative-btn');
+        container.insertBefore(newAlternative, addButton);
+    }
+
+    removeAlternative(button) {
+        const alternatives = document.querySelectorAll('.alternative-item');
+        if (alternatives.length > 2) {
+            button.closest('.alternative-item').remove();
+            this.renumberAlternatives();
+        } else {
+            showNotification('A questão deve ter pelo menos 2 alternativas.', 'error');
+        }
+    }
+
+    renumberAlternatives() {
+        document.querySelectorAll('.alternative-item').forEach((item, index) => {
+            const input = item.querySelector('input[type="text"]');
+            const letter = String.fromCharCode(65 + index);
+            input.placeholder = `Alternativa ${letter}`;
+            
+            const radio = item.querySelector('input[type="radio"]');
+            radio.value = index;
+        });
+    }
+
+    addQuestion() {
+        clearNotifications();
+        
+        const questionText = document.getElementById('question-text').value.trim();
+        const questionType = document.getElementById('question-type').value;
+        
+        if (!questionText) {
+            showNotification('Por favor, digite o enunciado da questão.', 'error');
+            return;
+        }
+        
+        let alternatives = [];
+        let correctAnswer = null;
+        
+        if (questionType === 'multiple' || questionType === 'truefalse') {
+            const alternativeItems = document.querySelectorAll('.alternative-item');
+            
+            alternativeItems.forEach((item, index) => {
+                const textInput = item.querySelector('input[type="text"]');
+                const radioInput = item.querySelector('input[type="radio"]');
+                
+                if (textInput.value.trim()) {
+                    alternatives.push({
+                        text: textInput.value.trim(),
+                        correct: radioInput.checked
+                    });
+                    
+                    if (radioInput.checked) {
+                        correctAnswer = index;
+                    }
+                }
+            });
+            
+            if (alternatives.length < 2) {
+                showNotification('A questão deve ter pelo menos 2 alternativas.', 'error');
+                return;
+            }
+            
+            if (correctAnswer === null) {
+                showNotification('Por favor, selecione a alternativa correta.', 'error');
+                return;
+            }
+        }
+        
+        const question = new Question({
+            text: questionText,
+            type: questionType,
+            alternatives: alternatives,
+            correctAnswer: correctAnswer
+        });
+        
+        this.examData.questions.push(question);
+        this.displayQuestions();
+        this.clearQuestionForm();
+        this.saveDraft();
+        
+        showNotification('Questão adicionada com sucesso!', 'success');
+    }
+
+    displayQuestions() {
+        const container = document.getElementById('questions-container');
+        container.innerHTML = '';
+        
+        if (this.examData.questions.length === 0) {
+            container.innerHTML = '<p class="no-questions">Nenhuma questão adicionada ainda.</p>';
+            return;
+        }
+        
+        this.examData.questions.forEach((question, index) => {
+            const questionEl = document.createElement('div');
+            questionEl.className = 'question-item';
+            questionEl.innerHTML = this.createQuestionHTML(question, index);
+            container.appendChild(questionEl);
+            
+            // Adicionar event listeners para os botões
+            questionEl.querySelector('.edit-question').addEventListener('click', () => {
+                this.editQuestion(index);
+            });
+            
+            questionEl.querySelector('.delete-question').addEventListener('click', () => {
+                this.deleteQuestion(index);
+            });
+        });
+    }
+
+    createQuestionHTML(question, index) {
         let alternativesHTML = '';
+        
         if (question.type === 'multiple' || question.type === 'truefalse') {
-            alternativesHTML = '<div class="alternatives">';
+            alternativesHTML = '<div class="alternatives-list">';
             question.alternatives.forEach((alt, altIndex) => {
-                const isCorrect = altIndex === question.correctAnswer;
                 alternativesHTML += `
-                    <div>${alt} ${isCorrect ? '<span class="correct">(Correta)</span>' : ''}</div>
+                    <div class="alternative-display ${alt.correct ? 'correct' : ''}">
+                        ${String.fromCharCode(65 + altIndex)}. ${alt.text}
+                        ${alt.correct ? ' ✓' : ''}
+                    </div>
                 `;
             });
             alternativesHTML += '</div>';
-        } else {
-            alternativesHTML = '<div class="alternatives"><em>Resposta aberta</em></div>';
         }
         
-        questionElement.innerHTML = `
-            <h4>Questão ${index + 1}</h4>
-            <p>${question.text}</p>
-            ${alternativesHTML}
-            <div class="question-actions">
-                <button class="btn-secondary edit-question">Editar</button>
-                <button class="btn-danger delete-question">Excluir</button>
+        return `
+            <div class="question-header">
+                <h4>Questão ${index + 1}</h4>
+                <div class="question-actions">
+                    <button class="btn-secondary edit-question">Editar</button>
+                    <button class="btn-danger delete-question">Excluir</button>
+                </div>
             </div>
+            <p class="question-text">${question.text}</p>
+            ${alternativesHTML}
         `;
+    }
+
+    editQuestion(index) {
+        const question = this.examData.questions[index];
+        document.getElementById('question-text').value = question.text;
+        document.getElementById('question-type').value = question.type;
         
-        questionsContainer.appendChild(questionElement);
+        this.toggleAlternatives(question.type);
         
-        // Adicionar event listeners para os botões
-        questionElement.querySelector('.delete-question').addEventListener('click', function() {
-            deleteQuestion(question.id);
+        if (question.type === 'multiple' || question.type === 'truefalse') {
+            this.populateAlternatives(question.alternatives, question.correctAnswer);
+        }
+        
+        // Remover a questão para readicionar após edição
+        this.examData.questions.splice(index, 1);
+        this.displayQuestions();
+    }
+
+    populateAlternatives(alternatives, correctIndex) {
+        const container = document.getElementById('alternatives-container');
+        container.innerHTML = '';
+        
+        alternatives.forEach((alt, index) => {
+            const letter = String.fromCharCode(65 + index);
+            const alternativeEl = document.createElement('div');
+            alternativeEl.className = 'alternative-item';
+            alternativeEl.innerHTML = `
+                <input type="radio" name="correct-answer" value="${index}" ${index === correctIndex ? 'checked' : ''}>
+                <input type="text" value="${alt.text}" placeholder="Alternativa ${letter}" required>
+                <button class="btn-danger remove-alternative">X</button>
+            `;
+            container.appendChild(alternativeEl);
         });
         
-        questionElement.querySelector('.edit-question').addEventListener('click', function() {
-            editQuestion(question.id);
-        });
-    });
-}
+        // Adicionar botão para novas alternativas
+        const addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.className = 'btn-secondary';
+        addButton.id = 'add-alternative-btn';
+        addButton.textContent = '+ Adicionar Alternativa';
+        addButton.addEventListener('click', () => this.addAlternative());
+        container.appendChild(addButton);
+    }
 
-// Função para excluir questão
-function deleteQuestion(questionId) {
-    if (confirm('Tem certeza que deseja excluir esta questão?')) {
-        examData.questions = examData.questions.filter(q => q.id !== questionId);
-        displayQuestions();
+    deleteQuestion(index) {
+        if (confirm('Tem certeza que deseja excluir esta questão?')) {
+            this.examData.questions.splice(index, 1);
+            this.displayQuestions();
+            this.saveDraft();
+            showNotification('Questão excluída com sucesso.', 'success');
+        }
+    }
+
+    clearQuestionForm() {
+        document.getElementById('question-text').value = '';
+        document.getElementById('question-type').value = 'multiple';
+        this.toggleAlternatives('multiple');
+    }
+
+    async saveExam() {
+        clearNotifications();
+        
+        // Validar dados básicos
+        this.examData.title = document.getElementById('exam-title').value.trim();
+        this.examData.description = document.getElementById('exam-description').value.trim();
+        this.examData.duration = parseInt(document.getElementById('exam-time').value) || 60;
+        this.examData.date = document.getElementById('exam-date').value;
+        
+        if (!this.examData.title) {
+            showNotification('Por favor, informe o título da prova.', 'error');
+            return;
+        }
+        
+        if (!this.examData.date) {
+            showNotification('Por favor, selecione a data de aplicação.', 'error');
+            return;
+        }
+        
+        if (this.examData.questions.length === 0) {
+            showNotification('Por favor, adicione pelo menos uma questão.', 'error');
+            return;
+        }
+        
+        try {
+            showNotification('Salvando prova...', 'info');
+            
+            const result = await saveExam(this.examData);
+            
+            if (result.success) {
+                showNotification('Prova salva com sucesso!', 'success');
+                this.clearDraft();
+                this.examData.questions = [];
+                this.displayQuestions();
+                
+                // Limpar formulário principal
+                document.getElementById('exam-title').value = '';
+                document.getElementById('exam-description').value = '';
+                document.getElementById('exam-time').value = '60';
+                document.getElementById('exam-date').value = '';
+            } else {
+                showNotification('Erro ao salvar prova: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('Erro ao salvar prova:', error);
+            showNotification('Erro ao conectar com o servidor.', 'error');
+        }
+    }
+
+    saveDraft() {
+        localStorage.setItem('examDraft', JSON.stringify(this.examData));
+    }
+
+    loadDraft() {
+        const draft = localStorage.getItem('examDraft');
+        if (draft) {
+            try {
+                this.examData = JSON.parse(draft);
+                
+                // Preencher campos do formulário
+                document.getElementById('exam-title').value = this.examData.title;
+                document.getElementById('exam-description').value = this.examData.description;
+                document.getElementById('exam-time').value = this.examData.duration;
+                document.getElementById('exam-date').value = this.examData.date;
+                
+                this.displayQuestions();
+            } catch (error) {
+                console.error('Erro ao carregar rascunho:', error);
+            }
+        }
+    }
+
+    clearDraft() {
+        localStorage.removeItem('examDraft');
     }
 }
 
-// Função para editar questão
-function editQuestion(questionId) {
-    // Implementar funcionalidade de edição
-    alert('Funcionalidade de edição será implementada em breve.');
-}
-
-// Função para salvar a prova
-function saveExam() {
-    // Coletar dados da prova
-    examData.title = document.getElementById('exam-title').value.trim();
-    examData.description = document.getElementById('exam-description').value.trim();
-    examData.duration = parseInt(document.getElementById('exam-time').value);
-    examData.date = document.getElementById('exam-date').value;
-    
-    // Validações
-    if (!examData.title) {
-        alert('Por favor, informe o título da prova.');
-        return;
-    }
-    
-    if (!examData.date) {
-        alert('Por favor, selecione a data de aplicação da prova.');
-        return;
-    }
-    
-    if (examData.questions.length === 0) {
-        alert('Por favor, adicione pelo menos uma questão à prova.');
-        return;
-    }
-    
-    // Enviar para o servidor
-    sendExamToServer();
-}
-
-
-function sendExamToServer() {
-
-    console.log('Dados da prova a serem enviados:', examData);
-
-    alert('Prova salva com sucesso! Em uma implementação real, os dados seriam enviados ao servidor.');
-}
+// Inicializar quando o DOM estiver carregado
+document.addEventListener('DOMContentLoaded', () => {
+    window.examCreator = new ExamCreator();
+});
