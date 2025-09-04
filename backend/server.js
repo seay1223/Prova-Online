@@ -8,8 +8,7 @@ import crypto from 'crypto';
 import db from './database/database.js';
 
 // Configuração do __dirname para ESM
-const __filename = fileURLToPath(
-    import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
@@ -191,6 +190,7 @@ app.get('*.html', (req, res) => {
 // ===== API ROUTES =====
 
 // API - Autenticação (CORRIGIDA)
+// API - Autenticação (CORRIGIDA)
 app.post('/api/auth/login', (req, res) => {
     const { email, senha, tipo, turma } = req.body;
 
@@ -200,31 +200,43 @@ app.post('/api/auth/login', (req, res) => {
         if (!fs.existsSync(credenciaisPath)) {
             return res.status(500).json({
                 success: false,
-                message: 'Sistema em configuração'
+                message: 'Sistema em configuração - Arquivo de credenciais não encontrado'
             });
         }
 
         const fileContent = fs.readFileSync(credenciaisPath, 'utf8');
 
         // Extrair credenciais usando regex mais robusta
-        const alunosMatch = fileContent.match(/alunos:\s*(\[[^\]]*\])/);
-        const professoresMatch = fileContent.match(/professores:\s*(\[[^\]]*\])/);
+        const alunosMatch = fileContent.match(/alunos:\s*(\[[\s\S]*?\])/);
+        const professoresMatch = fileContent.match(/professores:\s*(\[[\s\S]*?\])/);
         const senhaMatch = fileContent.match(/senhaPadrao:\s*['"]([^'"]+)['"]/);
 
         if (!alunosMatch || !professoresMatch || !senhaMatch) {
+            console.error('Erro ao extrair credenciais do arquivo:', {
+                alunosMatch: !!alunosMatch,
+                professoresMatch: !!professoresMatch,
+                senhaMatch: !!senhaMatch
+            });
             return res.status(500).json({
                 success: false,
-                message: 'Configuração inválida'
+                message: 'Configuração inválida - Estrutura do arquivo de credenciais incorreta'
             });
         }
 
-        // Processar alunos
+        // Processar alunos - método mais seguro
         let alunos = [];
         try {
-            const alunosStr = alunosMatch[1].replace(/(\w+):/g, '"$1":').replace(/'/g, '"');
+            // Extrair apenas o array de alunos
+            const alunosStr = alunosMatch[1]
+                .replace(/(\w+):/g, '"$1":') // Converter chaves para formato JSON
+                .replace(/'/g, '"') // Converter aspas simples para duplas
+                .replace(/,\s*]/g, ']'); // Remover vírgulas finais
+
             alunos = JSON.parse(alunosStr);
+            console.log('Alunos carregados:', alunos.length);
         } catch (e) {
             console.error('Erro ao processar alunos:', e);
+            console.error('String problemática:', alunosMatch[1]);
             return res.status(500).json({
                 success: false,
                 message: 'Formato de alunos inválido'
@@ -234,8 +246,11 @@ app.post('/api/auth/login', (req, res) => {
         // Processar professores
         let professores = [];
         try {
-            const professoresStr = professoresMatch[1].replace(/'/g, '"');
+            const professoresStr = professoresMatch[1]
+                .replace(/'/g, '"')
+                .replace(/,\s*]/g, ']');
             professores = JSON.parse(professoresStr);
+            console.log('Professores carregados:', professores.length);
         } catch (e) {
             console.error('Erro ao processar professores:', e);
             return res.status(500).json({
@@ -245,6 +260,7 @@ app.post('/api/auth/login', (req, res) => {
         }
 
         const senhaPadrao = senhaMatch[1];
+        console.log('Senha padrão:', senhaPadrao);
 
         // Verificar credenciais
         let isValid = false;
@@ -252,6 +268,8 @@ app.post('/api/auth/login', (req, res) => {
 
         if (tipo === 'aluno') {
             const aluno = alunos.find(a => a.email === email);
+            console.log('Aluno encontrado:', aluno);
+            
             isValid = aluno && senha === senhaPadrao;
 
             if (isValid) {
@@ -273,6 +291,7 @@ app.post('/api/auth/login', (req, res) => {
             }
         } else if (tipo === 'professor') {
             isValid = professores.includes(email) && senha === senhaPadrao;
+            console.log('Professor válido:', isValid);
 
             if (isValid) {
                 userData = {
@@ -304,7 +323,7 @@ app.post('/api/auth/login', (req, res) => {
         console.error('Erro no login:', error);
         res.status(500).json({
             success: false,
-            message: 'Erro interno do servidor'
+            message: 'Erro interno do servidor: ' + error.message
         });
     }
 });
