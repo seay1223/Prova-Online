@@ -234,6 +234,11 @@ select:focus {
     outline: none;
 }
 
+.user-cpf {
+    font-size: 0.9em;
+    color: #666;
+    margin-right: 15px;
+}
 
 /* Responsividade */
 

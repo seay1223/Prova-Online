@@ -234,9 +234,7 @@ select:focus {
     outline: none;
 }
 
-
 /* Estilo para mensagens de erro/sucesso */
-
 .message {
     padding: 10px;
     margin-bottom: 15px;
@@ -248,6 +246,12 @@ select:focus {
     background-color: #ffebee;
     color: #c62828;
     border: 1px solid #ef9a9a;
+}
+
+.user-cpf {
+    font-size: 0.9em;
+    color: #666;
+    margin-right: 15px;
 }
 
 .success-message {
@@ -263,20 +267,24 @@ select:focus {
         padding-left: 15px;
         padding-right: 15px;
     }
+    
     .navbar h1 {
         margin-left: 0;
         text-align: center;
         width: 100%;
     }
+    
     .form-options {
         flex-direction: column;
         align-items: flex-start;
         gap: 10px;
     }
+    
     .footer-links {
         flex-direction: column;
         gap: 10px;
     }
+    
     .radio-group {
         flex-direction: column;
         gap: 10px;
