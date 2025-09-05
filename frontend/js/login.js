@@ -1,12 +1,16 @@
-// frontend/js/login.js
+// frontend/js/login.js - VERSÃO CORRIGIDA
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== SISTEMA DE LOGIN INICIADO ===');
+    
     // Verificar se CREDENCIAIS está disponível
     if (typeof window.CREDENCIAIS === 'undefined') {
         console.error('CREDENCIAIS não está disponível. Verifique se o arquivo credenciais.js foi carregado.');
+        showError('Erro de configuração do sistema. Recarregue a página.');
         return;
     }
     
     const CREDENCIAIS = window.CREDENCIAIS;
+    console.log('Credenciais carregadas:', CREDENCIAIS);
     
     const loginForm = document.getElementById('loginForm');
     const tipoAluno = document.getElementById('tipoAluno');
@@ -16,147 +20,161 @@ document.addEventListener('DOMContentLoaded', function() {
     const turmaGroupProfessor = document.getElementById('turmaGroupProfessor');
     const turmaProfessor = document.getElementById('turmaProfessor');
     
+    // Inicializar estado dos campos de turma
+    if (turmaGroupAluno && turmaGroupProfessor) {
+        if (tipoAluno.checked) {
+            turmaGroupAluno.style.display = 'block';
+            turmaGroupProfessor.style.display = 'none';
+        } else {
+            turmaGroupAluno.style.display = 'none';
+            turmaGroupProfessor.style.display = 'block';
+        }
+    }
+    
     // Mostrar/ocultar campo de turma baseado no tipo de usuário
     if (tipoAluno && tipoProfessor && turmaGroupAluno && turmaGroupProfessor) {
         tipoAluno.addEventListener('change', function() {
             if (this.checked) {
                 turmaGroupAluno.style.display = 'block';
-                turmaAluno.setAttribute('required', 'required');
+                if (turmaAluno) turmaAluno.setAttribute('required', 'required');
                 turmaGroupProfessor.style.display = 'none';
-                turmaProfessor.removeAttribute('required');
+                if (turmaProfessor) turmaProfessor.removeAttribute('required');
             }
         });
         
         tipoProfessor.addEventListener('change', function() {
             if (this.checked) {
                 turmaGroupProfessor.style.display = 'block';
-                turmaProfessor.setAttribute('required', 'required');
+                if (turmaProfessor) turmaProfessor.setAttribute('required', 'required');
                 turmaGroupAluno.style.display = 'none';
-                turmaAluno.removeAttribute('required');
+                if (turmaAluno) turmaAluno.removeAttribute('required');
             }
         });
     }
     
-    // frontend/js/login.js
-// ... código anterior ...
-
-if (loginForm) {
-    loginForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        removeMessages();
-        
-        const cpf = document.getElementById('cpf').value.trim().replace(/\D/g, '');
-        const password = document.getElementById('password').value.trim();
-        const tipoElement = document.querySelector('input[name="tipo"]:checked');
-        const tipo = tipoElement ? tipoElement.value : null;
-        
-        // Obter a turma correta baseada no tipo de usuário
-        let turma = null;
-        if (tipo === 'aluno') {
-            turma = document.getElementById('turmaAluno').value;
-        } else if (tipo === 'professor') {
-            turma = document.getElementById('turmaProfessor').value;
-        }
-        
-        // Log para depuração
-        console.log('=== DADOS DO FORMULÁRIO ===');
-        console.log('CPF:', cpf);
-        console.log('Senha:', password);
-        console.log('Tipo:', tipo);
-        console.log('Turma:', turma);
-        console.log('CREDENCIAIS disponível:', typeof window.CREDENCIAIS !== 'undefined');
-        
-        if (!cpf || !password || !tipo) {
-            showError('Por favor, preencha todos os campos e selecione o tipo de usuário.');
-            return;
-        }
-        
-        if (!turma) {
+    // Adicionar máscara de CPF
+    const cpfInput = document.getElementById('cpf');
+    if (cpfInput) {
+        cpfInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length > 11) value = value.slice(0, 11);
+            
+            if (value.length <= 11) {
+                value = value.replace(/(\d{3})(\d)/, '$1.$2');
+                value = value.replace(/(\d{3})(\d)/, '$1.$2');
+                value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            }
+            
+            e.target.value = value;
+        });
+    }
+    
+    // Manipular envio do formulário
+    if (loginForm) {
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            removeMessages();
+            
+            const cpf = document.getElementById('cpf').value.trim().replace(/\D/g, '');
+            const password = document.getElementById('password').value.trim();
+            const tipoElement = document.querySelector('input[name="tipo"]:checked');
+            const tipo = tipoElement ? tipoElement.value : null;
+            
+            // Obter a turma correta baseada no tipo de usuário
+            let turma = null;
             if (tipo === 'aluno') {
-                showError('Por favor, selecione sua turma.');
-            } else {
-                showError('Por favor, selecione a turma para dar aula.');
+                turma = document.getElementById('turmaAluno') ? document.getElementById('turmaAluno').value : null;
+            } else if (tipo === 'professor') {
+                turma = document.getElementById('turmaProfessor') ? document.getElementById('turmaProfessor').value : null;
             }
-            return;
-        }
-        
-        if (!isValidCPF(cpf)) {
-            showError('Por favor, insira um CPF válido.');
-            return;
-        }
-        
-        try {
-            // Preparar os dados para envio
-            const loginData = {
-                cpf: cpf,
-                senha: password,
-                tipo: tipo,
-                turma: turma
-            };
             
             // Log para depuração
-            console.log('Enviando dados para login:', loginData);
+            console.log('=== DADOS DO FORMULÁRIO ===');
+            console.log('CPF:', cpf);
+            console.log('Senha:', password);
+            console.log('Tipo:', tipo);
+            console.log('Turma:', turma);
+            console.log('CREDENCIAIS disponível:', typeof window.CREDENCIAIS !== 'undefined');
             
-            // Fazer a requisição para a API de login
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(loginData)
-            });
+            // Validações
+            if (!cpf || !password || !tipo) {
+                showError('Por favor, preencha todos os campos e selecione o tipo de usuário.');
+                return;
+            }
             
-            // Log para depuração
-            console.log('Status da resposta:', response.status);
+            if (!turma) {
+                if (tipo === 'aluno') {
+                    showError('Por favor, selecione sua turma.');
+                } else {
+                    showError('Por favor, selecione a turma para dar aula.');
+                }
+                return;
+            }
             
-            // Ler a resposta como texto primeiro para depuração
-            const responseText = await response.text();
-            console.log('Resposta do servidor (texto):', responseText);
+            if (!isValidCPF(cpf)) {
+                showError('Por favor, insira um CPF válido.');
+                return;
+            }
             
-            // Tentar converter para JSON
-            let data;
             try {
-                data = JSON.parse(responseText);
-            } catch (e) {
-                console.error('Erro ao converter resposta para JSON:', e);
-                throw new Error('Resposta do servidor em formato inválido');
-            }
-            
-            console.log('Resposta do servidor (JSON):', data);
-            
-            if (data.success) {
-                // Salva no localStorage
-                localStorage.setItem('userData', JSON.stringify(data.user));
-                localStorage.setItem('authToken', data.token);
+                // Preparar os dados para envio
+                const loginData = {
+                    cpf: cpf,
+                    senha: password,
+                    tipo: tipo,
+                    turma: turma
+                };
                 
-                // Se for professor, adiciona ao credenciais
-                if (tipo === 'professor') {
-                    const sucesso = CREDENCIAIS.adicionarProfessor(cpf);
-                    if (!sucesso) {
-                        console.warn('Não foi possível salvar as credenciais do professor');
-                    }
+                // Log para depuração
+                console.log('Enviando dados para login:', loginData);
+                
+                // Fazer a requisição para a API de login
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(loginData)
+                });
+                
+                // Log para depuração
+                console.log('Status da resposta:', response.status);
+                
+                // Verificar se a resposta é JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Resposta não é JSON:', text);
+                    throw new Error('Resposta do servidor em formato inválido');
                 }
                 
-                showSuccess('Login realizado com sucesso! Redirecionando...');
+                const data = await response.json();
+                console.log('Resposta do servidor (JSON):', data);
                 
-                setTimeout(() => {
-                    // Redireciona para a página correta
-                    if (tipo === 'aluno') {
-                        window.location.href = '/aluno';
-                    } else {
-                        window.location.href = '/professor';
-                    }
-                }, 1500);
-            } else {
-                showError(data.message || 'CPF, senha ou turma incorretos. Por favor, tente novamente.');
+                if (data.success) {
+                    // Salva no localStorage
+                    localStorage.setItem('userData', JSON.stringify(data.user));
+                    localStorage.setItem('authToken', data.token);
+                    
+                    showSuccess('Login realizado com sucesso! Redirecionando...');
+                    
+                    setTimeout(() => {
+                        // Redireciona para a página correta
+                        if (tipo === 'aluno') {
+                            window.location.href = data.redirectUrl || '/aluno';
+                        } else {
+                            window.location.href = data.redirectUrl || '/professor';
+                        }
+                    }, 1500);
+                } else {
+                    showError(data.message || 'CPF, senha ou turma incorretos. Por favor, tente novamente.');
+                }
+            } catch (error) {
+                console.error('Erro no login:', error);
+                showError(error.message || 'Erro de conexão. Tente novamente.');
             }
-        } catch (error) {
-            console.error('Erro no login:', error);
-            showError(error.message || 'Erro de conexão. Tente novamente.');
-        }
-    });
-}
-
+        });
+    }
     
     // Funções auxiliares
     function isValidCPF(cpf) {
@@ -199,7 +217,20 @@ if (loginForm) {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-message message';
         errorDiv.textContent = mensagem;
-        loginForm.prepend(errorDiv);
+        errorDiv.style.cssText = 'background-color: #ffebee; color: #c62828; padding: 12px; border-radius: 4px; margin-bottom: 16px; border: 1px solid #ef5350;';
+        
+        if (loginForm) {
+            loginForm.prepend(errorDiv);
+        } else {
+            document.body.prepend(errorDiv);
+        }
+        
+        // Remover automaticamente após 5 segundos
+        setTimeout(() => {
+            if (errorDiv.parentNode) {
+                errorDiv.parentNode.removeChild(errorDiv);
+            }
+        }, 5000);
     }
     
     function showSuccess(mensagem) {
@@ -208,11 +239,40 @@ if (loginForm) {
         const successDiv = document.createElement('div');
         successDiv.className = 'success-message message';
         successDiv.textContent = mensagem;
-        loginForm.prepend(successDiv);
+        successDiv.style.cssText = 'background-color: #e8f5e9; color: #2e7d32; padding: 12px; border-radius: 4px; margin-bottom: 16px; border: 1px solid #66bb6a;';
+        
+        if (loginForm) {
+            loginForm.prepend(successDiv);
+        } else {
+            document.body.prepend(successDiv);
+        }
+        
+        // Remover automaticamente após 5 segundos
+        setTimeout(() => {
+            if (successDiv.parentNode) {
+                successDiv.parentNode.removeChild(successDiv);
+            }
+        }, 5000);
     }
     
     function removeMessages() {
         const messages = document.querySelectorAll('.message');
-        messages.forEach(msg => msg.remove());
+        messages.forEach(msg => {
+            if (msg.parentNode) {
+                msg.parentNode.removeChild(msg);
+            }
+        });
+    }
+    
+    // Adicionar link para cadastro se não existir
+    if (!document.querySelector('.register-link')) {
+        const registerLink = document.createElement('div');
+        registerLink.className = 'register-link';
+        registerLink.style.cssText = 'text-align: center; margin-top: 20px;';
+        registerLink.innerHTML = '<p>Não tem uma conta? <a href="/cadastro" style="color: #2196f3; text-decoration: none;">Cadastre-se</a></p>';
+        
+        if (loginForm) {
+            loginForm.appendChild(registerLink);
+        }
     }
 });

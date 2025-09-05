@@ -211,96 +211,89 @@ app.get('*.html', (req, res) => {
 // ===== API ROUTES =====
 // API - Autenticação (ATUALIZADA PARA CPF)
 // API - Autenticação (ATUALIZADA PARA CPF)
+// API - Autenticação (CORRIGIDA)
 app.post('/api/auth/login', (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
+    
+    console.log('=== TENTATIVA DE LOGIN ===');
+    console.log('CPF:', cpf);
+    console.log('Tipo:', tipo);
+    console.log('Turma:', turma);
+    
     try {
         const credenciaisPath = path.join(__dirname, '../frontend/js/credenciais.js');
         if (!fs.existsSync(credenciaisPath)) {
+            console.error('Arquivo de credenciais não encontrado:', credenciaisPath);
             return res.status(500).json({
                 success: false,
                 message: 'Sistema em configuração - Arquivo de credenciais não encontrado'
             });
         }
+        
         const fileContent = fs.readFileSync(credenciaisPath, 'utf8');
-        // Extrair credenciais usando regex mais robusta
-        const alunosMatch = fileContent.match(/alunos:\s*(\[[\s\S]*?\])/);
-        const professoresMatch = fileContent.match(/professores:\s*(\[[\s\S]*?\])/);
-        const senhaMatch = fileContent.match(/senhaPadrao:\s*['"]([^'"]+)['"]/);
+        console.log('Arquivo de credenciais carregado com sucesso');
         
-        if (!alunosMatch || !professoresMatch || !senhaMatch) {
-            console.error('Erro ao extrair credenciais do arquivo:', {
-                alunosMatch: !!alunosMatch,
-                professoresMatch: !!professoresMatch,
-                senhaMatch: !!senhaMatch
-            });
-            return res.status(500).json({
-                success: false,
-                message: 'Configuração inválida - Estrutura do arquivo de credenciais incorreta'
-            });
-        }
-        
-        // Processar alunos - método mais seguro
+        // Extrair dados usando métodos mais robustos
         let alunos = [];
-        try {
-            // Extrair apenas o array de alunos
-            const alunosStr = alunosMatch[1]
-                .replace(/(\w+):/g, '"$1":') // Converter chaves para formato JSON
-                .replace(/'/g, '"') // Converter aspas simples para duplas
-                .replace(/,\s*]/g, ']'); // Remover vírgulas finais
-            
-            alunos = JSON.parse(alunosStr);
-            console.log('Alunos carregados:', alunos.length);
-        } catch (e) {
-            console.error('Erro ao processar alunos:', e);
-            console.error('String problemática:', alunosMatch[1]);
-            return res.status(500).json({
-                success: false,
-                message: 'Formato de alunos inválido'
-            });
-        }
-        
-        // Processar professores
         let professores = [];
-        try {
-            let professoresStr = professoresMatch[1];
-            
-            // Remover quebras de linha e espaços extras
-            professoresStr = professoresStr.replace(/\s+/g, ' ').trim();
-            
-            // Verificar o tipo de array
-            if (professoresStr.includes('cpf:')) {
-                // Array de objetos - novo formato
-                professoresStr = professoresStr
+        let senhaPadrao = 'Escolasesi123456'; // Valor padrão
+        
+        // Extrair senha padrão
+        const senhaMatch = fileContent.match(/senhaPadrao:\s*['"]([^'"]+)['"]/);
+        if (senhaMatch) {
+            senhaPadrao = senhaMatch[1];
+        }
+        console.log('Senha padrão:', senhaPadrao);
+        
+        // Extrair alunos - método mais seguro
+        const alunosMatch = fileContent.match(/alunos:\s*\[([\s\S]*?)\]/);
+        if (alunosMatch) {
+            try {
+                // Limpar e converter para JSON válido
+                let alunosStr = alunosMatch[1]
                     .replace(/(\w+):/g, '"$1":')
                     .replace(/'/g, '"')
-                    .replace(/,\s*]/g, ']');
+                    .replace(/\/\/.*$/gm, '') // Remover comentários de linha
+                    .replace(/\/\*[\s\S]*?\*\//g, '') // Remover comentários de bloco
+                    .trim();
                 
-                professores = JSON.parse(professoresStr);
-            } else {
-                // Array de strings - formato antigo
-                professoresStr = professoresStr
-                    .replace(/'/g, '"')
-                    .replace(/,\s*]/g, ']');
-                
-                // Converter array de strings para array de objetos
-                const professoresArray = JSON.parse(professoresStr);
-                professores = professoresArray.map(cpf => ({ cpf: cpf }));
+                // Garantir que é um array válido
+                alunosStr = alunosStr.replace(/,\s*$/, ''); // Remover vírgula final
+                alunos = JSON.parse(`[${alunosStr}]`);
+                console.log('Alunos carregados:', alunos.length);
+            } catch (e) {
+                console.error('Erro ao processar alunos, usando fallback:', e);
+                // Fallback: extrair CPFs manualmente
+                const cpfRegex = /(\d{11})/g;
+                const matches = alunosMatch[1].match(cpfRegex) || [];
+                alunos = matches.map(cpf => ({ cpf: cpf }));
             }
-            
-            console.log('Professores carregados:', professores);
-        } catch (e) {
-            console.error('Erro ao processar professores, usando fallback:', e);
-            
-            // Fallback: extrair tudo que parece CPF ou email
-            const cpfRegex = /(\d{11})/g;
-            const matches = professoresMatch[1].match(cpfRegex) || [];
-            professores = matches.map(cpf => ({ cpf: cpf }));
-            
-            console.log('Professores (fallback):', professores);
         }
         
-        const senhaPadrao = senhaMatch[1];
-        console.log('Senha padrão:', senhaPadrao);
+        // Extrair professores
+        const professoresMatch = fileContent.match(/professores:\s*\[([\s\S]*?)\]/);
+        if (professoresMatch) {
+            try {
+                let professoresStr = professoresMatch[1]
+                    .replace(/(\w+):/g, '"$1":')
+                    .replace(/'/g, '"')
+                    .replace(/\/\/.*$/gm, '')
+                    .replace(/\/\*[\s\S]*?\*\//g, '')
+                    .trim();
+                
+                professoresStr = professoresStr.replace(/,\s*$/, '');
+                professores = JSON.parse(`[${professoresStr}]`);
+                console.log('Professores carregados:', professores.length);
+            } catch (e) {
+                console.error('Erro ao processar professores, usando fallback:', e);
+                const cpfRegex = /(\d{11})/g;
+                const matches = professoresMatch[1].match(cpfRegex) || [];
+                professores = matches.map(cpf => ({ cpf: cpf }));
+            }
+        }
+        
+        console.log('Alunos encontrados:', alunos);
+        console.log('Professores encontrados:', professores);
         
         // Verificar credenciais
         let isValid = false;
@@ -310,47 +303,57 @@ app.post('/api/auth/login', (req, res) => {
             const aluno = alunos.find(a => a.cpf === cpf);
             console.log('Aluno encontrado:', aluno);
             
-            isValid = aluno && senha === senhaPadrao;
-            if (isValid) {
-                // Verificar se a turma coincide
-                if (aluno.turma !== turma) {
-                    return res.status(401).json({
-                        success: false,
-                        message: `Você não está cadastrado na turma ${turma}. Sua turma é ${aluno.turma}.`
-                    });
+            if (aluno) {
+                isValid = senha === senhaPadrao;
+                console.log('Senha válida:', isValid);
+                
+                if (isValid) {
+                    // Verificar se a turma coincide
+                    if (aluno.turma && aluno.turma !== turma) {
+                        return res.status(401).json({
+                            success: false,
+                            message: `Você não está cadastrado na turma ${turma}. Sua turma é ${aluno.turma}.`
+                        });
+                    }
+                    userData = {
+                        cpf: cpf,
+                        nome: aluno.nome || `Aluno ${cpf}`,
+                        tipo: tipo,
+                        turma: aluno.turma || turma
+                    };
                 }
-                userData = {
-                    cpf: cpf,
-                    nome: aluno.nome || cpf,
-                    tipo: tipo,
-                    turma: aluno.turma
-                };
             }
         } else if (tipo === 'professor') {
-            // Para professores, verificar se o CPF está na lista
             const professor = professores.find(p => p.cpf === cpf);
-            isValid = professor && senha === senhaPadrao;
             console.log('Professor encontrado:', professor);
-            console.log('Professor válido:', isValid);
             
-            if (isValid) {
-                userData = {
-                    cpf: cpf,
-                    nome: professor.nome || cpf,
-                    tipo: tipo
-                };
+            if (professor) {
+                isValid = senha === senhaPadrao;
+                console.log('Senha válida:', isValid);
+                
+                if (isValid) {
+                    userData = {
+                        cpf: cpf,
+                        nome: professor.nome || `Professor ${cpf}`,
+                        tipo: tipo
+                    };
+                }
             }
         }
         
         if (isValid) {
             const token = crypto.randomBytes(32).toString('hex');
+            console.log('Login bem-sucedido para:', userData);
+            
             res.json({
                 success: true,
                 message: 'Login realizado com sucesso!',
                 token: token,
-                user: userData
+                user: userData,
+                redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
             });
         } else {
+            console.log('Credenciais inválidas');
             res.status(401).json({
                 success: false,
                 message: 'CPF, senha ou turma incorretos'
@@ -364,7 +367,6 @@ app.post('/api/auth/login', (req, res) => {
         });
     }
 });
-
 // API - Login (mantida para compatibilidade)
 app.post('/api/login', (req, res) => {
     const { cpf, senha, tipo } = req.body;
