@@ -6,17 +6,36 @@ import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import db from './database/database.js';
+import session from 'express-session';
 
 // Configuração do __dirname para ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
 const app = express();
 const PORT = 3000;
 
 // ===== MIDDLEWARES =====
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ===== CONFIGURAÇÃO DE SESSÕES =====
+app.use(session({
+    secret: 'prova-online-secret-key-2025',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false,
+        maxAge: 24 * 60 * 60 * 1000,
+        httpOnly: true
+    }
+}));
+
+// Middleware para debug de sessões
+app.use((req, res, next) => {
+    console.log('[SESSION] ID:', req.sessionID);
+    console.log('[SESSION] User:', req.session.user);
+    next();
+});
 
 // Middleware de logging detalhado
 app.use((req, res, next) => {
@@ -49,6 +68,17 @@ staticPaths.forEach(pathName => {
 });
 
 app.use(express.static(path.join(__dirname, '../frontend')));
+
+// ===== MIDDLEWARE DE AUTENTICAÇÃO =====
+// Middleware para verificar se usuário está autenticado como professor
+function requireProfessorAuth(req, res, next) {
+    if (req.session && req.session.user && req.session.user.tipo === 'professor') {
+        next(); // Usuário é professor, pode continuar
+    } else {
+        // Redireciona para login se não estiver autenticado
+        res.redirect('/login/?error=Acesso restrito a professores');
+    }
+}
 
 // ===== SISTEMA DE FILA =====
 const processingQueue = {
@@ -136,6 +166,7 @@ function isValidCPF(cpf) {
     return true;
 }
 
+// ===== ROTAS DA API =====
 // Rota para buscar dados do usuário
 app.get('/api/user/data', async (req, res) => {
     try {
@@ -175,7 +206,6 @@ app.get('/api/user/data', async (req, res) => {
     }
 });
 
-// ===== ROTAS DA API =====
 // API - Cadastro de usuários
 app.post('/api/cadastro', (req, res) => {
     const { nome, cpf, senha, tipo, turma } = req.body;
@@ -259,11 +289,11 @@ app.post('/api/cadastro', (req, res) => {
     }
 });
 
-// API - Autenticação
+// API - Autenticação (COM SESSÕES)
 app.post('/api/auth/login', (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
     
-    console.log('=== TENTATIVA DE LOGIN ===');
+    console.log('=== TENTATIVA DE LOGIN COM SESSÃO ===');
     console.log('CPF:', cpf);
     console.log('Tipo:', tipo);
     console.log('Turma:', turma);
@@ -271,63 +301,57 @@ app.post('/api/auth/login', (req, res) => {
     try {
         const usuariosPath = path.join(__dirname, 'usuarios.json');
         
-        // Verificar se o arquivo de usuários existe
         if (!fs.existsSync(usuariosPath)) {
-            console.error('Arquivo de usuários não encontrado:', usuariosPath);
             return res.status(500).json({
                 success: false,
-                message: 'Sistema em configuração - Nenhum usuário cadastrado'
+                message: 'Sistema em configuração'
             });
         }
         
-        // Carregar usuários do arquivo JSON
         const fileContent = fs.readFileSync(usuariosPath, 'utf8');
         const usuarios = JSON.parse(fileContent);
         
-        console.log('Usuários carregados:', usuarios.length);
-        
-        // Buscar usuário pelo CPF e tipo
         const usuario = usuarios.find(u => u.cpf === cpf && u.tipo === tipo);
         
         if (usuario) {
-            console.log('Usuário encontrado:', usuario);
-            
-            // Verificar senha
             if (usuario.senha === senha) {
-                // Para alunos, verificar se a turma coincide
-                if (tipo === 'aluno') {
-                    if (usuario.turma !== turma) {
-                        return res.status(401).json({
-                            success: false,
-                            message: `Você não está cadastrado na turma ${turma}. Sua turma é ${usuario.turma}.`
-                        });
-                    }
+                if (tipo === 'aluno' && usuario.turma !== turma) {
+                    return res.status(401).json({
+                        success: false,
+                        message: `Turma incorreta. Sua turma é ${usuario.turma}.`
+                    });
                 }
                 
-                const token = crypto.randomBytes(32).toString('hex');
-                console.log('Login bem-sucedido para:', usuario);
+                // SALVAR NA SESSÃO (remover senha por segurança)
+                const userSession = { ...usuario };
+                delete userSession.senha;
                 
-                res.json({
-                    success: true,
-                    message: 'Login realizado com sucesso!',
-                    token: token,
-                    user: {
-                        cpf: cpf,
-                        nome: usuario.nome,
-                        tipo: tipo,
-                        turma: usuario.turma || null
-                    },
-                    redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
+                req.session.user = userSession;
+                req.session.save((err) => {
+                    if (err) {
+                        console.error('Erro ao salvar sessão:', err);
+                        return res.status(500).json({
+                            success: false,
+                            message: 'Erro interno'
+                        });
+                    }
+                    
+                    console.log('Sessão salva:', req.session.user);
+                    
+                    res.json({
+                        success: true,
+                        message: 'Login realizado com sucesso!',
+                        user: userSession,
+                        redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
+                    });
                 });
             } else {
-                console.log('Senha incorreta');
                 res.status(401).json({
                     success: false,
                     message: 'Senha incorreta'
                 });
             }
         } else {
-            console.log('Usuário não encontrado');
             res.status(401).json({
                 success: false,
                 message: 'Usuário não encontrado'
@@ -337,9 +361,32 @@ app.post('/api/auth/login', (req, res) => {
         console.error('Erro no login:', error);
         res.status(500).json({
             success: false,
-            message: 'Erro interno do servidor: ' + error.message
+            message: 'Erro interno do servidor'
         });
     }
+});
+
+// API - Verificar sessão
+app.get('/api/auth/check', (req, res) => {
+    if (req.session && req.session.user) {
+        res.json({ 
+            authenticated: true, 
+            user: req.session.user 
+        });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+// API - Logout
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Erro ao fazer logout:', err);
+            return res.status(500).json({ error: 'Erro ao fazer logout' });
+        }
+        res.json({ success: true, message: 'Logout realizado com sucesso' });
+    });
 });
 
 // API - Verificar tentativa de prova (ATUALIZADA PARA CPF)
@@ -627,7 +674,7 @@ app.post('/api/exams/:examId/submit', (req, res) => {
             if (row.count > 0) {
                 return res.status(400).json({ error: 'Você já realizou esta prova' });
             }
-            
+          
             // Salvar as respostas
             const respostaData = answers.map(answer => [
                 uuidv4(),
@@ -682,167 +729,7 @@ app.post('/api/exams/:examId/submit', (req, res) => {
     );
 });
 
-// ===== ROTAS DE PÁGINAS HTML =====
-// Rotas de Login
-app.get(['/', '/login', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-// Rotas do Aluno
-app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
-});
-
-app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
-});
-
-// Rotas do Professor
-app.get(['/professor', '/professor/dashboard', '/professor/dashboard.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
-});
-
-app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
-});
-
-app.get(['/professor/gerenciar', '/professor/gerenciar.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
-});
-
-app.get(['/professor/resultados', '/professor/resultados.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
-});
-
-// Rotas Institucionais
-app.get(['/cadastro', '/cadastro/'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/cadastro/cadastro.html'));
-});
-
-app.get('/contato', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
-});
-
-app.get('/politica', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/politica/politica.html'));
-});
-
-app.get('/termos', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
-});
-
-// Rota para arquivos HTML específicos do professor
-app.get('/professor/:page.html', (req, res) => {
-    const page = req.params.page;
-    const filePath = path.join(__dirname, `../frontend/professor/${page}/${page}.html`);
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({ error: 'Página não encontrada' });
-    }
-});
-
-// Rota curinga para arquivos HTML - DEVE SER A ÚLTIMA ROTA
-app.get('*.html', (req, res) => {
-    const requestedPath = req.path;
-    const filePath = path.join(__dirname, '../frontend', requestedPath);
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({
-            error: 'Página não encontrada',
-            path: requestedPath,
-            method: req.method
-        });
-    }
-});
-
-// Rota para acesso via link único (ATUALIZADA PARA CPF)
-app.get('/acesso-unico/:linkUnico', (req, res) => {
-    const { linkUnico } = req.params;
-    db.get(
-        `SELECT lu.*, p.titulo, p.data_limite 
-         FROM links_unicos lu 
-         JOIN provas p ON lu.prova_id = p.id 
-         WHERE lu.link_unico = ? AND lu.utilizado = 0`, [linkUnico],
-        (err, row) => {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            if (!row) {
-                return res.status(404).send('Link inválido ou já utilizado');
-            }
-            
-            const dataLimite = new Date(row.data_limite);
-            const agora = new Date();
-            if (agora > dataLimite) {
-                return res.status(400).send('Prazo para realização da prova expirado');
-            }
-            
-            db.run(
-                `UPDATE links_unicos SET utilizado = 1, data_utilizacao = datetime('now') WHERE link_unico = ?`, [linkUnico],
-                function(err) {
-                    if (err) {
-                        console.error('Erro ao marcar link como utilizado:', err);
-                    }
-                    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova-unica.html'));
-                }
-            );
-        }
-    );
-});
-
-// Rota para página de prova individual
-app.get('/prova/:id', (req, res) => {
-    const provaId = req.params.id;
-    const token = req.query.token;
-    
-    if (!token) {
-        return res.status(401).send('Acesso não autorizado. Token necessário.');
-    }
-    
-    // Verificação simplificada do token
-    console.log('Acesso à prova:', provaId, 'com token:', token);
-    
-    // Servir a página da prova
-    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova.html'));
-});
-
-// ===== ROTAS DE SAÚDE DO SISTEMA =====
-app.get('/api/status', (req, res) => {
-    res.json({
-        status: 'online',
-        message: 'Servidor PROVA-ONLINE está funcionando!',
-        timestamp: new Date().toISOString()
-    });
-});
-
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-    });
-});
-
-// ===== MANIPULADORES DE ERRO =====
-app.use((req, res) => {
-    res.status(404).json({
-        error: 'Rota não encontrada',
-        path: req.path,
-        method: req.method
-    });
-});
-
-app.use((err, req, res, next) => {
-    console.error('Erro:', err.stack);
-    res.status(500).json({
-        error: 'Erro interno do servidor',
-        message: err.message
-    });
-});
-
-// server.js - Adicione estas rotas
+// Rotas de autenticação de usuários
 app.post('/api/usuarios/login', (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
     
@@ -906,6 +793,156 @@ app.post('/api/usuarios/cadastrar', (req, res) => {
                 });
             }
         );
+    });
+});
+
+// ===== ROTAS DE PÁGINAS HTML =====
+// Rotas de Login (públicas) - Incluindo versão com barra e parâmetros
+app.get(['/', '/login', '/login/', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
+});
+
+// Rotas do Aluno
+app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
+});
+
+app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
+});
+
+// ===== ROTAS DO PROFESSOR (PROTEGIDAS) =====
+// Todas as rotas do professor agora estão protegidas com requireProfessorAuth
+app.get(['/professor', '/professor.html', '/professor/dashboard', '/professor/dashboard.html'], requireProfessorAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
+});
+
+app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html', '/criarprova.html'], requireProfessorAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
+});
+
+app.get(['/professor/gerenciar', '/professor/gerenciar.html'], requireProfessorAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
+});
+
+app.get(['/professor/resultados', '/professor/resultados.html'], requireProfessorAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
+});
+
+// Rotas Institucionais
+app.get(['/cadastro', '/cadastro/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/cadastro/cadastro.html'));
+});
+
+app.get('/contato', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
+});
+
+app.get('/politica', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/politica/politica.html'));
+});
+
+app.get('/termos', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
+});
+
+// Rota para acesso via link único (ATUALIZADA PARA CPF)
+app.get('/acesso-unico/:linkUnico', (req, res) => {
+    const { linkUnico } = req.params;
+    db.get(
+        `SELECT lu.*, p.titulo, p.data_limite 
+         FROM links_unicos lu 
+         JOIN provas p ON lu.prova_id = p.id 
+         WHERE lu.link_unico = ? AND lu.utilizado = 0`, [linkUnico],
+        (err, row) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            if (!row) {
+                return res.status(404).send('Link inválido ou já utilizado');
+            }
+            
+            const dataLimite = new Date(row.data_limite);
+            const agora = new Date();
+            if (agora > dataLimite) {
+                return res.status(400).send('Prazo para realização da prova expirado');
+            }
+            
+            db.run(
+                `UPDATE links_unicos SET utilizado = 1, data_utilizacao = datetime('now') WHERE link_unico = ?`, [linkUnico],
+                function(err) {
+                    if (err) {
+                        console.error('Erro ao marcar link como utilizado:', err);
+                    }
+                    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova-unica.html'));
+                }
+            );
+        }
+    );
+});
+
+// Rota para página de prova individual
+app.get('/prova/:id', (req, res) => {
+    const provaId = req.params.id;
+    const token = req.query.token;
+    
+    if (!token) {
+        return res.status(401).send('Acesso não autorizado. Token necessário.');
+    }
+    
+    // Verificação simplificada do token
+    console.log('Acesso à prova:', provaId, 'com token:', token);
+    
+    // Servir a página da prova
+    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/prova.html'));
+});
+
+// ROTA CURINGA *.html - DEVE SER A ÚLTIMA ROTA
+app.get('*.html', (req, res) => {
+    const requestedPath = req.path;
+    const filePath = path.join(__dirname, '../frontend', requestedPath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({
+            error: 'Página não encontrada',
+            path: requestedPath,
+            method: req.method
+        });
+    }
+});
+
+// ===== ROTAS DE SAÚDE DO SISTEMA =====
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: 'online',
+        message: 'Servidor PROVA-ONLINE está funcionando!',
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
+// ===== MANIPULADORES DE ERRO =====
+app.use((req, res) => {
+    res.status(404).json({
+        error: 'Rota não encontrada',
+        path: req.path,
+        method: req.method
+    });
+});
+
+app.use((err, req, res, next) => {
+    console.error('Erro:', err.stack);
+    res.status(500).json({
+        error: 'Erro interno do servidor',
+        message: err.message
     });
 });
 

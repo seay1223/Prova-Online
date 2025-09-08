@@ -104,63 +104,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Primeiro tenta autenticar via localStorage (mais rápido)
+            // Autenticar via localStorage
             try {
                 const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-                const usuarioLocal = usuarios.find(user => 
+                console.log('Usuários no localStorage:', usuarios);
+                
+                const usuario = usuarios.find(user => 
                     user.cpf === cpf && 
                     user.senha === password && 
-                    user.tipo === tipo && 
-                    user.turma === turma
+                    user.tipo === tipo
                 );
                 
-                if (usuarioLocal) {
-                    handleLoginSuccess(usuarioLocal, tipo);
-                    return;
+                if (usuario) {
+                    // Verificar se a turma corresponde
+                    if (tipo === 'aluno' && usuario.turma !== turma) {
+                        showError('Turma incorreta para este aluno.');
+                        return;
+                    }
+                    
+                    // Para professor, a turma não precisa ser verificada rigorosamente
+                    // pois professores podem acessar múltiplas turmas
+                    handleLoginSuccess(usuario, tipo);
+                } else {
+                    showError('CPF, senha ou tipo de usuário incorretos.');
                 }
+                
             } catch (error) {
-                console.warn('Erro ao verificar localStorage:', error);
+                console.error('Erro ao verificar localStorage:', error);
+                showError('Erro ao acessar dados. Tente novamente.');
             }
-            
-            // Se não encontrou no localStorage, tenta autenticar via servidor
-            authenticateWithServer(cpf, password, tipo, turma);
-        });
-    }
-    
-    // Função para autenticar via servidor
-    function authenticateWithServer(cpf, password, tipo, turma) {
-        fetch('/api/usuarios/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                cpf: cpf,
-                senha: password,
-                tipo: tipo,
-                turma: turma
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.usuario) {
-                // Adicionar usuário ao localStorage para futuros logins
-                const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-                const usuarioExistenteIndex = usuarios.findIndex(user => user.cpf === cpf);
-                
-                if (usuarioExistenteIndex === -1) {
-                    usuarios.push(data.usuario);
-                    localStorage.setItem('usuarios', JSON.stringify(usuarios));
-                }
-                
-                handleLoginSuccess(data.usuario, tipo);
-            } else {
-                showError(data.message || 'CPF, senha, tipo de usuário ou turma incorretos.');
-            }
-        })
-        .catch(error => {
-            console.error('Erro na autenticação:', error);
-            showError('Erro ao conectar com o servidor. Tente novamente.');
         });
     }
     
@@ -168,26 +140,30 @@ document.addEventListener('DOMContentLoaded', function() {
     function handleLoginSuccess(usuario, tipo) {
         console.log('Login bem-sucedido:', usuario);
         
-        // Salvar dados do usuário logado - CORREÇÃO AQUI
-        localStorage.setItem('usuarioLogado', JSON.stringify(usuario));
-        
-        // Também salva em userData para compatibilidade
-        localStorage.setItem('userData', JSON.stringify({
-            id: usuario.id || usuario.cpf,
+        // Salvar dados do usuário logado
+        const userData = {
+            id: usuario.cpf,
             nome: usuario.nome,
             cpf: usuario.cpf,
             tipo: usuario.tipo,
-            turma: usuario.turma
-        }));
+            turma: usuario.turma,
+            timestamp: new Date().getTime()
+        };
+        
+        // Salvar no sessionStorage (dura apenas durante a sessão)
+        sessionStorage.setItem('usuarioLogado', JSON.stringify(userData));
+        
+        // Também salvar no localStorage para persistência
+        localStorage.setItem('usuarioLogado', JSON.stringify(userData));
         
         showSuccess('Login realizado com sucesso! Redirecionando...');
         
         setTimeout(() => {
             // Redireciona para a página correta
             if (tipo === 'aluno') {
-                window.location.href = '/aluno';
+                window.location.href = 'aluno.html';
             } else {
-                window.location.href = '/professor';
+                window.location.href = 'professor.html';
             }
         }, 1500);
     }
@@ -275,7 +251,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const registerLink = document.createElement('div');
         registerLink.className = 'register-link';
         registerLink.style.cssText = 'text-align: center; margin-top: 20px;';
-        registerLink.innerHTML = '<p>Não tem uma conta? <a href="/cadastro" style="color: #2196f3; text-decoration: none;">Cadastre-se</a></p>';
+        registerLink.innerHTML = '<p>Não tem uma conta? <a href="cadastro.html" style="color: #2196f3; text-decoration: none;">Cadastre-se</a></p>';
         
         if (loginForm) {
             loginForm.appendChild(registerLink);

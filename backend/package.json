@@ -10,17 +10,22 @@
     "init-db": "node database/init.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "sqlite3": "^5.1.6",
-    "uuid": "^9.0.0",
+    "compression": "^1.7.4",
     "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-session": "^1.18.2",
     "helmet": "^7.0.0",
-    "compression": "^1.7.4"
+    "sqlite3": "^5.1.6",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["provas", "online", "education"],
+  "keywords": [
+    "provas",
+    "online",
+    "education"
+  ],
   "author": "PROVA-ONLINE",
   "license": "MIT"
 }

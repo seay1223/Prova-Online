@@ -1,4 +1,3 @@
-// database.js - Sistema SQLite real
 import sqlite3 from 'sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -116,13 +115,11 @@ function initializeDatabase() {
         FOREIGN KEY (aluno_cpf) REFERENCES usuarios (cpf)
     )`);
     
-    // Sincronizar usuários do SQLite com localStorage
     syncUsersToLocalStorage();
-    
     console.log('Tabelas do banco de dados verificadas/criadas com sucesso.');
 }
 
-// Função para sincronizar usuários do SQLite com localStorage
+// Função para sincronizar usuários do SQLite (REMOVER localStorage)
 function syncUsersToLocalStorage() {
     db.all("SELECT * FROM usuarios", (err, rows) => {
         if (err) {
@@ -130,18 +127,8 @@ function syncUsersToLocalStorage() {
             return;
         }
         
-        // Converter para o formato do localStorage
-        const usuariosLocalStorage = rows.map(user => ({
-            nome: user.nome,
-            cpf: user.cpf,
-            senha: user.senha,
-            tipo: user.tipo,
-            turma: user.turma
-        }));
-        
-        // Salvar no localStorage
-        localStorage.setItem('usuarios', JSON.stringify(usuariosLocalStorage));
-        console.log(`Sincronizados ${usuariosLocalStorage.length} usuários para localStorage`);
+        console.log(`Encontrados ${rows.length} usuários no banco de dados`);
+        // Apenas loga a informação, não tenta usar localStorage
     });
 }
 
@@ -167,10 +154,12 @@ db.get("SELECT COUNT(*) as count FROM usuarios WHERE cpf = ?", ['12345678900'], 
                     console.error('Erro ao criar usuário professor padrão:', err);
                 } else {
                     console.log('Usuário professor padrão criado: CPF 12345678900 / senha 123456');
-                    syncUsersToLocalStorage(); // Sincronizar após criar usuário
+                    syncUsersToLocalStorage();
                 }
             }
         );
+    } else {
+        console.log('Usuário professor já existe');
     }
 });
 
@@ -186,7 +175,7 @@ export default {
                 if (err) {
                     callback(err);
                 } else {
-                    syncUsersToLocalStorage(); // Sincronizar após criar usuário
+                    syncUsersToLocalStorage();
                     callback(null, { id, ...userData });
                 }
             }
