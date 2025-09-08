@@ -72,9 +72,15 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 // ===== MIDDLEWARE DE AUTENTICAÇÃO =====
 // Middleware para verificar se usuário está autenticado como professor
 function requireProfessorAuth(req, res, next) {
+    console.log('[AUTH] Verificando autenticação para professor...');
+    console.log('[AUTH] Sessão:', req.session);
+    console.log('[AUTH] Usuário na sessão:', req.session.user);
+    
     if (req.session && req.session.user && req.session.user.tipo === 'professor') {
+        console.log('[AUTH] Autenticação bem-sucedida para professor');
         next(); // Usuário é professor, pode continuar
     } else {
+        console.log('[AUTH] Falha na autenticação. Redirecionando para login.');
         // Redireciona para login se não estiver autenticado
         res.redirect('/login/?error=Acesso restrito a professores');
     }
@@ -207,6 +213,7 @@ app.get('/api/user/data', async (req, res) => {
 });
 
 // API - Cadastro de usuários
+// API - Cadastro de usuários
 app.post('/api/cadastro', (req, res) => {
     const { nome, cpf, senha, tipo, turma } = req.body;
     
@@ -216,38 +223,49 @@ app.post('/api/cadastro', (req, res) => {
     console.log('Tipo:', tipo);
     console.log('Turma:', turma);
     
-    // Validar CPF
-    if (!isValidCPF(cpf)) {
-        return res.status(400).json({
-            success: false,
-            message: 'CPF inválido'
-        });
-    }
-    
-    // Validar campos obrigatórios
-    if (!nome || !cpf || !senha || !tipo) {
-        return res.status(400).json({
-            success: false,
-            message: 'Todos os campos são obrigatórios'
-        });
-    }
-    
-    // Para alunos, a turma é obrigatória
-    if (tipo === 'aluno' && !turma) {
-        return res.status(400).json({
-            success: false,
-            message: 'Turma é obrigatória para alunos'
-        });
-    }
-    
     try {
+        // Validar campos obrigatórios
+        if (!nome || !cpf || !senha || !tipo) {
+            return res.status(400).json({
+                success: false,
+                message: 'Todos os campos são obrigatórios'
+            });
+        }
+        
+        // Para alunos, a turma é obrigatória
+        if (tipo === 'aluno' && !turma) {
+            return res.status(400).json({
+                success: false,
+                message: 'Turma é obrigatória para alunos'
+            });
+        }
+        
+        // Validar CPF
+        if (!isValidCPF(cpf)) {
+            return res.status(400).json({
+                success: false,
+                message: 'CPF inválido'
+            });
+        }
+        
         const usuariosPath = path.join(__dirname, 'usuarios.json');
         let usuarios = [];
         
         // Carregar usuários existentes se o arquivo existir
         if (fs.existsSync(usuariosPath)) {
-            const data = fs.readFileSync(usuariosPath, 'utf8');
-            usuarios = JSON.parse(data);
+            try {
+                const data = fs.readFileSync(usuariosPath, 'utf8');
+                if (data.trim() === '') {
+                    console.log('Arquivo usuarios.json está vazio, inicializando array vazio');
+                    usuarios = [];
+                } else {
+                    usuarios = JSON.parse(data);
+                }
+            } catch (parseError) {
+                console.error('Erro ao ler arquivo usuarios.json:', parseError);
+                // Se houver erro ao ler, inicializa com array vazio
+                usuarios = [];
+            }
         }
         
         // Verificar se o CPF já existe
@@ -272,14 +290,22 @@ app.post('/api/cadastro', (req, res) => {
         usuarios.push(novoUsuario);
         
         // Salvar no arquivo JSON
-        fs.writeFileSync(usuariosPath, JSON.stringify(usuarios, null, 2));
+        try {
+            fs.writeFileSync(usuariosPath, JSON.stringify(usuarios, null, 2));
+            console.log('Usuário cadastrado com sucesso:', novoUsuario);
+            
+            res.json({
+                success: true,
+                message: 'Usuário cadastrado com sucesso!'
+            });
+        } catch (writeError) {
+            console.error('Erro ao salvar arquivo usuarios.json:', writeError);
+            return res.status(500).json({
+                success: false,
+                message: 'Erro ao salvar dados do usuário'
+            });
+        }
         
-        console.log('Usuário cadastrado com sucesso:', novoUsuario);
-        
-        res.json({
-            success: true,
-            message: 'Usuário cadastrado com sucesso!'
-        });
     } catch (error) {
         console.error('Erro ao cadastrar usuário:', error);
         res.status(500).json({
@@ -288,7 +314,7 @@ app.post('/api/cadastro', (req, res) => {
         });
     }
 });
-
+ 
 // API - Autenticação (COM SESSÕES)
 app.post('/api/auth/login', (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
@@ -368,6 +394,7 @@ app.post('/api/auth/login', (req, res) => {
 
 // API - Verificar sessão
 app.get('/api/auth/check', (req, res) => {
+    console.log('[AUTH CHECK] Verificando sessão:', req.session.user);
     if (req.session && req.session.user) {
         res.json({ 
             authenticated: true, 
@@ -799,50 +826,62 @@ app.post('/api/usuarios/cadastrar', (req, res) => {
 // ===== ROTAS DE PÁGINAS HTML =====
 // Rotas de Login (públicas) - Incluindo versão com barra e parâmetros
 app.get(['/', '/login', '/login/', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
+    console.log('[ROTA] Servindo página de login');
     res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
 });
 
 // Rotas do Aluno
 app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
+    console.log('[ROTA] Servindo página do aluno');
     res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
 });
 
 app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
+    console.log('[ROTA] Servindo página de provas do aluno');
     res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
 });
 
 // ===== ROTAS DO PROFESSOR (PROTEGIDAS) =====
 // Todas as rotas do professor agora estão protegidas com requireProfessorAuth
 app.get(['/professor', '/professor.html', '/professor/dashboard', '/professor/dashboard.html'], requireProfessorAuth, (req, res) => {
+    console.log('[ROTA] Servindo página do professor');
+    console.log('[ROTA] Caminho do arquivo:', path.join(__dirname, '../frontend/professor/professor.html'));
     res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
 });
 
 app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html', '/criarprova.html'], requireProfessorAuth, (req, res) => {
+    console.log('[ROTA] Servindo página de criação de provas');
     res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
 });
 
 app.get(['/professor/gerenciar', '/professor/gerenciar.html'], requireProfessorAuth, (req, res) => {
+    console.log('[ROTA] Servindo página de gerenciamento de provas');
     res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
 });
 
 app.get(['/professor/resultados', '/professor/resultados.html'], requireProfessorAuth, (req, res) => {
+    console.log('[ROTA] Servindo página de resultados');
     res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
 });
 
 // Rotas Institucionais
 app.get(['/cadastro', '/cadastro/'], (req, res) => {
+    console.log('[ROTA] Servindo página de cadastro');
     res.sendFile(path.join(__dirname, '../frontend/cadastro/cadastro.html'));
 });
 
 app.get('/contato', (req, res) => {
+    console.log('[ROTA] Servindo página de contato');
     res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
 });
 
 app.get('/politica', (req, res) => {
+    console.log('[ROTA] Servindo página de política');
     res.sendFile(path.join(__dirname, '../frontend/politica/politica.html'));
 });
 
 app.get('/termos', (req, res) => {
+    console.log('[ROTA] Servindo página de termos');
     res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
 });
 
@@ -901,9 +940,12 @@ app.get('/prova/:id', (req, res) => {
 app.get('*.html', (req, res) => {
     const requestedPath = req.path;
     const filePath = path.join(__dirname, '../frontend', requestedPath);
+    console.log('[ROTA] Buscando arquivo HTML:', filePath);
     if (fs.existsSync(filePath)) {
+        console.log('[ROTA] Arquivo encontrado, enviando:', filePath);
         res.sendFile(filePath);
     } else {
+        console.log('[ROTA] Arquivo não encontrado:', filePath);
         res.status(404).json({
             error: 'Página não encontrada',
             path: requestedPath,
@@ -931,6 +973,7 @@ app.get('/health', (req, res) => {
 
 // ===== MANIPULADORES DE ERRO =====
 app.use((req, res) => {
+    console.log('[ERRO] Rota não encontrada:', req.path);
     res.status(404).json({
         error: 'Rota não encontrada',
         path: req.path,
@@ -939,7 +982,7 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-    console.error('Erro:', err.stack);
+    console.error('[ERRO] Erro interno:', err.stack);
     res.status(500).json({
         error: 'Erro interno do servidor',
         message: err.message

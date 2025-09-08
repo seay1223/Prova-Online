@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const tipoProfessor = document.getElementById('tipoProfessor');
     const turmaGroup = document.getElementById('turmaGroup');
     const turmaSelect = document.getElementById('turma');
-
+    
     // Mostrar/ocultar campo de turma baseado no tipo de usuário
     if (tipoAluno && tipoProfessor && turmaGroup) {
         tipoAluno.addEventListener('change', function() {
@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 turmaSelect.setAttribute('required', 'required');
             }
         });
-
+        
         tipoProfessor.addEventListener('change', function() {
             if (this.checked) {
                 turmaGroup.style.display = 'none';
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
+    
     // Adicionar máscara de CPF
     const cpfInput = document.getElementById('cpf');
     if (cpfInput) {
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
             e.target.value = value;
         });
     }
-
+    
     // Manipular envio do formulário
     if (cadastroForm) {
         cadastroForm.addEventListener('submit', function(e) {
@@ -76,77 +76,100 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            try {
-                // Preparar os dados para armazenamento
-                const userData = {
-                    nome: nome,
-                    cpf: cpf,
-                    senha: password,
-                    tipo: tipo,
-                    turma: turma
-                };
+            // Preparar os dados para envio
+            const userData = {
+                nome: nome,
+                cpf: cpf,
+                senha: password,
+                tipo: tipo,
+                turma: turma
+            };
+            
+            console.log('Enviando dados para cadastro:', userData);
+            
+            // Enviar requisição para a API de cadastro
+            fetch('/api/cadastro', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(userData)
+            })
+            .then(async response => {
+                console.log('Status da resposta:', response.status);
                 
-                console.log('Salvando dados do usuário:', userData);
+                // Obter o corpo da resposta como texto
+                const responseText = await response.text();
+                console.log('Resposta do servidor (texto bruto):', responseText);
                 
-                // Obter usuários existentes do localStorage
-                const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-                
-                // Verificar se o CPF já está cadastrado
-                const usuarioExistente = usuarios.find(user => user.cpf === cpf);
-                if (usuarioExistente) {
-                    showError('Este CPF já está cadastrado.');
-                    return;
+                // Verificar se a resposta está vazia
+                if (!responseText.trim()) {
+                    throw new Error('Resposta vazia do servidor');
                 }
                 
-                // Adicionar novo usuário
-                usuarios.push(userData);
+                // Tentar analisar como JSON
+                try {
+                    const data = JSON.parse(responseText);
+                    
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Erro no cadastro');
+                    }
+                    
+                    return data;
+                } catch (parseError) {
+                    console.error('Erro ao analisar JSON:', parseError);
+                    throw new Error('Resposta inválida do servidor: ' + responseText);
+                }
+            })
+            .then(data => {
+                console.log('Resposta da API:', data);
                 
-                // Salvar no localStorage
-                localStorage.setItem('usuarios', JSON.stringify(usuarios));
-                
-                console.log('Usuário cadastrado com sucesso!');
-                console.log('Total de usuários cadastrados:', usuarios.length);
-                
-                showSuccess('Cadastro realizado com sucesso! Redirecionando para login...');
-                
-                setTimeout(() => {
-                    window.location.href = '/login';
-                }, 2000);
-                
-            } catch (error) {
-                console.error('Erro no cadastro:', error);
-                showError('Erro ao salvar dados. Tente novamente.');
-            }
+                if (data.success) {
+                    showSuccess('Cadastro realizado com sucesso! Redirecionando para login...');
+                    
+                    // Redireciona para a página de login após um breve delay
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 2000);
+                } else {
+                    showError(data.message || 'Erro ao cadastrar usuário.');
+                }
+            })
+            .catch(error => {
+                console.error('Erro na requisição:', error);
+                showError(error.message || 'Erro ao conectar com o servidor. Tente novamente.');
+            });
         });
     }
     
     // Funções auxiliares
     function isValidCPF(cpf) {
-    cpf = cpf.replace(/\D/g, '');
-    
-    if (cpf.length !== 11) return false;
-    if (/^(\d)\1{10}$/.test(cpf)) return false;
-    
-    let soma = 0;
-    for (let i = 0; i < 9; i++) {
-        soma += parseInt(cpf.charAt(i)) * (10 - i);
+        cpf = cpf.replace(/\D/g, '');
+        
+        if (cpf.length !== 11) return false;
+        if (/^(\d)\1{10}$/.test(cpf)) return false;
+        
+        let soma = 0;
+        for (let i = 0; i < 9; i++) {
+            soma += parseInt(cpf.charAt(i)) * (10 - i);
+        }
+        
+        let resto = 11 - (soma % 11);
+        if (resto === 10 || resto === 11) resto = 0;
+        if (resto !== parseInt(cpf.charAt(9))) return false;
+        
+        soma = 0;
+        for (let i = 0; i < 10; i++) {
+            soma += parseInt(cpf.charAt(i)) * (11 - i);
+        }
+        
+        resto = 11 - (soma % 11);
+        if (resto === 10 || resto === 11) resto = 0;
+        if (resto !== parseInt(cpf.charAt(10))) return false;
+        
+        return true;
     }
     
-    let resto = 11 - (soma % 11);
-    if (resto === 10 || resto === 11) resto = 0;
-    if (resto !== parseInt(cpf.charAt(9))) return false;
-    
-    soma = 0;
-    for (let i = 0; i < 10; i++) {
-        soma += parseInt(cpf.charAt(i)) * (11 - i);
-    }
-    
-    resto = 11 - (soma % 11);
-    if (resto === 10 || resto === 11) resto = 0;
-    if (resto !== parseInt(cpf.charAt(10))) return false;
-    
-    return true;
-}
     function showError(mensagem) {
         removeMessages();
         

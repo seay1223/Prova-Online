@@ -104,68 +104,68 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Autenticar via localStorage
-            try {
-                const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-                console.log('Usuários no localStorage:', usuarios);
+            // Dados a serem enviados
+            const loginData = {
+                cpf: cpf,
+                senha: password,
+                tipo: tipo,
+                turma: turma
+            };
+            
+            console.log('Enviando dados para a API:', loginData);
+            
+            // Enviar requisição para a API de autenticação
+            fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(loginData),
+                credentials: 'same-origin' // Importante para cookies de sessão
+            })
+            .then(async response => {
+                console.log('Status da resposta:', response.status);
                 
-                const usuario = usuarios.find(user => 
-                    user.cpf === cpf && 
-                    user.senha === password && 
-                    user.tipo === tipo
-                );
+                // Tentar obter o corpo da resposta como texto primeiro
+                const responseText = await response.text();
+                console.log('Resposta do servidor:', responseText);
                 
-                if (usuario) {
-                    // Verificar se a turma corresponde
-                    if (tipo === 'aluno' && usuario.turma !== turma) {
-                        showError('Turma incorreta para este aluno.');
-                        return;
+                if (!response.ok) {
+                    // Tentar analisar como JSON, se falhar, usar o texto bruto
+                    try {
+                        const errorData = JSON.parse(responseText);
+                        throw new Error(errorData.message || 'Erro na autenticação');
+                    } catch (e) {
+                        throw new Error(responseText || 'Erro na autenticação');
                     }
-                    
-                    // Para professor, a turma não precisa ser verificada rigorosamente
-                    // pois professores podem acessar múltiplas turmas
-                    handleLoginSuccess(usuario, tipo);
-                } else {
-                    showError('CPF, senha ou tipo de usuário incorretos.');
                 }
                 
-            } catch (error) {
-                console.error('Erro ao verificar localStorage:', error);
-                showError('Erro ao acessar dados. Tente novamente.');
-            }
+                // Se chegou aqui, a resposta foi bem-sucedida
+                try {
+                    return JSON.parse(responseText);
+                } catch (e) {
+                    throw new Error('Resposta inválida do servidor');
+                }
+            })
+            .then(data => {
+                console.log('Resposta da API:', data);
+                
+                if (data.success) {
+                    showSuccess('Login realizado com sucesso! Redirecionando...');
+                    
+                    // Redireciona para a página correta após um breve delay
+                    setTimeout(() => {
+                        window.location.href = data.redirectUrl;
+                    }, 1500);
+                } else {
+                    showError(data.message || 'CPF, senha ou tipo de usuário incorretos.');
+                }
+            })
+            .catch(error => {
+                console.error('Erro na requisição:', error);
+                showError(error.message || 'Erro ao conectar com o servidor. Tente novamente.');
+            });
         });
-    }
-    
-    // Função para tratar login bem-sucedido
-    function handleLoginSuccess(usuario, tipo) {
-        console.log('Login bem-sucedido:', usuario);
-        
-        // Salvar dados do usuário logado
-        const userData = {
-            id: usuario.cpf,
-            nome: usuario.nome,
-            cpf: usuario.cpf,
-            tipo: usuario.tipo,
-            turma: usuario.turma,
-            timestamp: new Date().getTime()
-        };
-        
-        // Salvar no sessionStorage (dura apenas durante a sessão)
-        sessionStorage.setItem('usuarioLogado', JSON.stringify(userData));
-        
-        // Também salvar no localStorage para persistência
-        localStorage.setItem('usuarioLogado', JSON.stringify(userData));
-        
-        showSuccess('Login realizado com sucesso! Redirecionando...');
-        
-        setTimeout(() => {
-            // Redireciona para a página correta
-            if (tipo === 'aluno') {
-                window.location.href = 'aluno.html';
-            } else {
-                window.location.href = 'professor.html';
-            }
-        }, 1500);
     }
     
     // Funções auxiliares
