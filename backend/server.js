@@ -10,6 +10,7 @@ import db from './database/database.js';
 // Configuração do __dirname para ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 const app = express();
 const PORT = 3000;
 
@@ -17,9 +18,11 @@ const PORT = 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Middleware de logging
+// Middleware de logging detalhado
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log(`[DEBUG] ${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Body:', JSON.stringify(req.body, null, 2));
     next();
 });
 
@@ -133,85 +136,130 @@ function isValidCPF(cpf) {
     return true;
 }
 
-// ===== ROTAS DE PÁGINAS HTML =====
-// Rotas de Login
-app.get(['/', '/login', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
-});
-
-// Rotas do Aluno
-app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
-});
-
-app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
-});
-
-// Rotas do Professor
-app.get(['/professor', '/professor/dashboard', '/professor/dashboard.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
-});
-
-app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
-});
-
-app.get(['/professor/gerenciar', '/professor/gerenciar.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
-});
-
-app.get(['/professor/resultados', '/professor/resultados.html'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
-});
-
-// Rotas Institucionais
-app.get(['/cadastro', '/cadastro/'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/cadastro/cadastro.html'));
-});
-
-app.get('/contato', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
-});
-
-app.get('/politica', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/politica/politica.html'));
-});
-
-app.get('/termos', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
-});
-
-// Rota para arquivos HTML específicos do professor
-app.get('/professor/:page.html', (req, res) => {
-    const page = req.params.page;
-    const filePath = path.join(__dirname, `../frontend/professor/${page}/${page}.html`);
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({ error: 'Página não encontrada' });
+// Rota para buscar dados do usuário
+app.get('/api/user/data', async (req, res) => {
+    try {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        
+        if (!token) {
+            return res.status(401).json({ error: 'Token não fornecido' });
+        }
+        
+        // Aqui você precisa implementar a verificação do token JWT
+        // Por enquanto, vamos buscar pelo CPF armazenado no localStorage do navegador
+        const userData = JSON.parse(req.headers.userdata || '{}');
+        
+        if (!userData.cpf) {
+            return res.status(401).json({ error: 'Dados do usuário não encontrados' });
+        }
+        
+        // Buscar usuário no banco de dados
+        db.get("SELECT * FROM usuarios WHERE cpf = ?", [userData.cpf], (err, user) => {
+            if (err) {
+                console.error('Erro ao buscar usuário:', err);
+                return res.status(500).json({ error: 'Erro interno do servidor' });
+            }
+            
+            if (!user) {
+                return res.status(404).json({ error: 'Usuário não encontrado' });
+            }
+            
+            // Retornar dados do usuário (sem a senha)
+            const { senha, ...userWithoutPassword } = user;
+            res.json(userWithoutPassword);
+        });
+        
+    } catch (error) {
+        console.error('Erro na rota /api/user/data:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
 
-// Rota curinga para arquivos HTML - DEVE SER A ÚLTIMA ROTA
-app.get('*.html', (req, res) => {
-    const requestedPath = req.path;
-    const filePath = path.join(__dirname, '../frontend', requestedPath);
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({
-            error: 'Página não encontrada',
-            path: requestedPath,
-            method: req.method
+// ===== ROTAS DA API =====
+// API - Cadastro de usuários
+app.post('/api/cadastro', (req, res) => {
+    const { nome, cpf, senha, tipo, turma } = req.body;
+    
+    console.log('=== TENTATIVA DE CADASTRO ===');
+    console.log('Nome:', nome);
+    console.log('CPF:', cpf);
+    console.log('Tipo:', tipo);
+    console.log('Turma:', turma);
+    
+    // Validar CPF
+    if (!isValidCPF(cpf)) {
+        return res.status(400).json({
+            success: false,
+            message: 'CPF inválido'
+        });
+    }
+    
+    // Validar campos obrigatórios
+    if (!nome || !cpf || !senha || !tipo) {
+        return res.status(400).json({
+            success: false,
+            message: 'Todos os campos são obrigatórios'
+        });
+    }
+    
+    // Para alunos, a turma é obrigatória
+    if (tipo === 'aluno' && !turma) {
+        return res.status(400).json({
+            success: false,
+            message: 'Turma é obrigatória para alunos'
+        });
+    }
+    
+    try {
+        const usuariosPath = path.join(__dirname, 'usuarios.json');
+        let usuarios = [];
+        
+        // Carregar usuários existentes se o arquivo existir
+        if (fs.existsSync(usuariosPath)) {
+            const data = fs.readFileSync(usuariosPath, 'utf8');
+            usuarios = JSON.parse(data);
+        }
+        
+        // Verificar se o CPF já existe
+        if (usuarios.find(u => u.cpf === cpf)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Usuário já cadastrado com este CPF'
+            });
+        }
+        
+        // Adicionar novo usuário
+        const novoUsuario = {
+            id: uuidv4(),
+            nome: nome,
+            cpf: cpf,
+            senha: senha,
+            tipo: tipo,
+            turma: tipo === 'aluno' ? turma : null,
+            dataCadastro: new Date().toISOString()
+        };
+        
+        usuarios.push(novoUsuario);
+        
+        // Salvar no arquivo JSON
+        fs.writeFileSync(usuariosPath, JSON.stringify(usuarios, null, 2));
+        
+        console.log('Usuário cadastrado com sucesso:', novoUsuario);
+        
+        res.json({
+            success: true,
+            message: 'Usuário cadastrado com sucesso!'
+        });
+    } catch (error) {
+        console.error('Erro ao cadastrar usuário:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno do servidor: ' + error.message
         });
     }
 });
 
-// ===== API ROUTES =====
-// API - Autenticação (ATUALIZADA PARA CPF)
-// API - Autenticação (ATUALIZADA PARA CPF)
-// API - Autenticação (CORRIGIDA)
+// API - Autenticação
 app.post('/api/auth/login', (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
     
@@ -221,142 +269,68 @@ app.post('/api/auth/login', (req, res) => {
     console.log('Turma:', turma);
     
     try {
-        const credenciaisPath = path.join(__dirname, '../frontend/js/credenciais.js');
-        if (!fs.existsSync(credenciaisPath)) {
-            console.error('Arquivo de credenciais não encontrado:', credenciaisPath);
+        const usuariosPath = path.join(__dirname, 'usuarios.json');
+        
+        // Verificar se o arquivo de usuários existe
+        if (!fs.existsSync(usuariosPath)) {
+            console.error('Arquivo de usuários não encontrado:', usuariosPath);
             return res.status(500).json({
                 success: false,
-                message: 'Sistema em configuração - Arquivo de credenciais não encontrado'
+                message: 'Sistema em configuração - Nenhum usuário cadastrado'
             });
         }
         
-        const fileContent = fs.readFileSync(credenciaisPath, 'utf8');
-        console.log('Arquivo de credenciais carregado com sucesso');
+        // Carregar usuários do arquivo JSON
+        const fileContent = fs.readFileSync(usuariosPath, 'utf8');
+        const usuarios = JSON.parse(fileContent);
         
-        // Extrair dados usando métodos mais robustos
-        let alunos = [];
-        let professores = [];
-        let senhaPadrao = 'Escolasesi123456'; // Valor padrão
+        console.log('Usuários carregados:', usuarios.length);
         
-        // Extrair senha padrão
-        const senhaMatch = fileContent.match(/senhaPadrao:\s*['"]([^'"]+)['"]/);
-        if (senhaMatch) {
-            senhaPadrao = senhaMatch[1];
-        }
-        console.log('Senha padrão:', senhaPadrao);
+        // Buscar usuário pelo CPF e tipo
+        const usuario = usuarios.find(u => u.cpf === cpf && u.tipo === tipo);
         
-        // Extrair alunos - método mais seguro
-        const alunosMatch = fileContent.match(/alunos:\s*\[([\s\S]*?)\]/);
-        if (alunosMatch) {
-            try {
-                // Limpar e converter para JSON válido
-                let alunosStr = alunosMatch[1]
-                    .replace(/(\w+):/g, '"$1":')
-                    .replace(/'/g, '"')
-                    .replace(/\/\/.*$/gm, '') // Remover comentários de linha
-                    .replace(/\/\*[\s\S]*?\*\//g, '') // Remover comentários de bloco
-                    .trim();
-                
-                // Garantir que é um array válido
-                alunosStr = alunosStr.replace(/,\s*$/, ''); // Remover vírgula final
-                alunos = JSON.parse(`[${alunosStr}]`);
-                console.log('Alunos carregados:', alunos.length);
-            } catch (e) {
-                console.error('Erro ao processar alunos, usando fallback:', e);
-                // Fallback: extrair CPFs manualmente
-                const cpfRegex = /(\d{11})/g;
-                const matches = alunosMatch[1].match(cpfRegex) || [];
-                alunos = matches.map(cpf => ({ cpf: cpf }));
-            }
-        }
-        
-        // Extrair professores
-        const professoresMatch = fileContent.match(/professores:\s*\[([\s\S]*?)\]/);
-        if (professoresMatch) {
-            try {
-                let professoresStr = professoresMatch[1]
-                    .replace(/(\w+):/g, '"$1":')
-                    .replace(/'/g, '"')
-                    .replace(/\/\/.*$/gm, '')
-                    .replace(/\/\*[\s\S]*?\*\//g, '')
-                    .trim();
-                
-                professoresStr = professoresStr.replace(/,\s*$/, '');
-                professores = JSON.parse(`[${professoresStr}]`);
-                console.log('Professores carregados:', professores.length);
-            } catch (e) {
-                console.error('Erro ao processar professores, usando fallback:', e);
-                const cpfRegex = /(\d{11})/g;
-                const matches = professoresMatch[1].match(cpfRegex) || [];
-                professores = matches.map(cpf => ({ cpf: cpf }));
-            }
-        }
-        
-        console.log('Alunos encontrados:', alunos);
-        console.log('Professores encontrados:', professores);
-        
-        // Verificar credenciais
-        let isValid = false;
-        let userData = {};
-        
-        if (tipo === 'aluno') {
-            const aluno = alunos.find(a => a.cpf === cpf);
-            console.log('Aluno encontrado:', aluno);
+        if (usuario) {
+            console.log('Usuário encontrado:', usuario);
             
-            if (aluno) {
-                isValid = senha === senhaPadrao;
-                console.log('Senha válida:', isValid);
-                
-                if (isValid) {
-                    // Verificar se a turma coincide
-                    if (aluno.turma && aluno.turma !== turma) {
+            // Verificar senha
+            if (usuario.senha === senha) {
+                // Para alunos, verificar se a turma coincide
+                if (tipo === 'aluno') {
+                    if (usuario.turma !== turma) {
                         return res.status(401).json({
                             success: false,
-                            message: `Você não está cadastrado na turma ${turma}. Sua turma é ${aluno.turma}.`
+                            message: `Você não está cadastrado na turma ${turma}. Sua turma é ${usuario.turma}.`
                         });
                     }
-                    userData = {
-                        cpf: cpf,
-                        nome: aluno.nome || `Aluno ${cpf}`,
-                        tipo: tipo,
-                        turma: aluno.turma || turma
-                    };
                 }
-            }
-        } else if (tipo === 'professor') {
-            const professor = professores.find(p => p.cpf === cpf);
-            console.log('Professor encontrado:', professor);
-            
-            if (professor) {
-                isValid = senha === senhaPadrao;
-                console.log('Senha válida:', isValid);
                 
-                if (isValid) {
-                    userData = {
+                const token = crypto.randomBytes(32).toString('hex');
+                console.log('Login bem-sucedido para:', usuario);
+                
+                res.json({
+                    success: true,
+                    message: 'Login realizado com sucesso!',
+                    token: token,
+                    user: {
                         cpf: cpf,
-                        nome: professor.nome || `Professor ${cpf}`,
-                        tipo: tipo
-                    };
-                }
+                        nome: usuario.nome,
+                        tipo: tipo,
+                        turma: usuario.turma || null
+                    },
+                    redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
+                });
+            } else {
+                console.log('Senha incorreta');
+                res.status(401).json({
+                    success: false,
+                    message: 'Senha incorreta'
+                });
             }
-        }
-        
-        if (isValid) {
-            const token = crypto.randomBytes(32).toString('hex');
-            console.log('Login bem-sucedido para:', userData);
-            
-            res.json({
-                success: true,
-                message: 'Login realizado com sucesso!',
-                token: token,
-                user: userData,
-                redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
-            });
         } else {
-            console.log('Credenciais inválidas');
+            console.log('Usuário não encontrado');
             res.status(401).json({
                 success: false,
-                message: 'CPF, senha ou turma incorretos'
+                message: 'Usuário não encontrado'
             });
         }
     } catch (error) {
@@ -366,55 +340,6 @@ app.post('/api/auth/login', (req, res) => {
             message: 'Erro interno do servidor: ' + error.message
         });
     }
-});
-// API - Login (mantida para compatibilidade)
-app.post('/api/login', (req, res) => {
-    const { cpf, senha, tipo } = req.body;
-    db.get(
-        `SELECT * FROM usuarios WHERE cpf = ? AND tipo = ?`, [cpf, tipo],
-        (err, row) => {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            if (row) {
-                if (senha === row.senha) {
-                    return res.json({
-                        success: true,
-                        message: 'Login realizado com sucesso!',
-                        user: { cpf, tipo }
-                    });
-                } else {
-                    return res.status(401).json({ success: false, message: 'Senha incorreta' });
-                }
-            } else {
-                return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
-            }
-        }
-    );
-});
-
-// API - Provas Disponíveis
-app.get('/api/exams/available', (req, res) => {
-    const authHeader = req.headers.authorization;
-    const token = authHeader ? authHeader.replace('Bearer ', '') : null;
-    
-    if (!token) {
-        return res.status(401).json({ error: 'Token não fornecido' });
-    }
-    
-    db.all(
-        `SELECT p.* 
-         FROM provas p 
-         WHERE p.data_limite > datetime('now')
-         ORDER BY p.data_criacao DESC`,
-        (err, rows) => {
-            if (err) {
-                console.error('Erro ao buscar provas:', err);
-                return res.status(500).json({ error: 'Erro interno do servidor' });
-            }
-            res.json(rows);
-        }
-    );
 });
 
 // API - Verificar tentativa de prova (ATUALIZADA PARA CPF)
@@ -476,99 +401,6 @@ app.get('/api/exams/:id', (req, res) => {
             });
         });
     });
-});
-
-// API - Cadastro de usuários (ATUALIZADA PARA CPF)
-// API - Cadastro de usuários (ATUALIZADA PARA CPF)
-app.post('/api/cadastro-credenciais', (req, res) => {
-    const { cpf, nome, senha, tipo, turma } = req.body;
-    
-    // Validar CPF
-    if (!isValidCPF(cpf)) {
-        return res.status(400).json({
-            success: false,
-            message: 'CPF inválido'
-        });
-    }
-    
-    try {
-        const credenciaisPath = path.join(__dirname, '../frontend/js/credenciais.js');
-        if (!fs.existsSync(credenciaisPath)) {
-            return res.status(500).json({
-                success: false,
-                message: 'Arquivo de credenciais não encontrado'
-            });
-        }
-        
-        let fileContent = fs.readFileSync(credenciaisPath, 'utf8');
-        
-        // Verificar se o CPF já existe
-        if (fileContent.includes(`cpf: '${cpf}'`) || fileContent.includes(`cpf: "${cpf}"`)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Usuário já cadastrado'
-            });
-        }
-        
-        // Extrair a posição dos arrays
-        const alunosIndex = fileContent.indexOf('alunos: [');
-        const professoresIndex = fileContent.indexOf('professores: [');
-        
-        if (tipo === 'aluno' && alunosIndex !== -1) {
-            // Para alunos, a turma é obrigatória
-            if (!turma) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Turma é obrigatória para alunos'
-                });
-            }
-            
-            const alunosEndIndex = fileContent.indexOf(']', alunosIndex);
-            if (alunosEndIndex !== -1) {
-                const before = fileContent.substring(0, alunosEndIndex);
-                const after = fileContent.substring(alunosEndIndex);
-                
-                // Verificar se já existem alunos cadastrados
-                const hasExistingAlunos = before.substring(alunosIndex).includes('{');
-                const separator = hasExistingAlunos ? ',' : '';
-                
-                // Adicionar aluno com CPF, nome e turma
-                fileContent = before + separator + `\n    { cpf: '${cpf}', nome: '${nome}', turma: '${turma}' }` + after;
-            }
-        } else if (tipo === 'professor' && professoresIndex !== -1) {
-            // Para professores, não exigimos turma no cadastro
-            const professoresEndIndex = fileContent.indexOf(']', professoresIndex);
-            if (professoresEndIndex !== -1) {
-                const before = fileContent.substring(0, professoresEndIndex);
-                const after = fileContent.substring(professoresEndIndex);
-                
-                // Verificar o formato do array de professores
-                const hasExistingProfessores = before.substring(professoresIndex).includes('{');
-                const separator = hasExistingProfessores ? ',' : '';
-                
-                // Adicionar professor apenas com CPF e nome (sem turma)
-                fileContent = before + separator + `\n    { cpf: '${cpf}', nome: '${nome}' }` + after;
-            }
-        } else {
-            return res.status(500).json({
-                success: false,
-                message: 'Estrutura do arquivo de credenciais inválida'
-            });
-        }
-        
-        fs.writeFileSync(credenciaisPath, fileContent);
-        
-        res.json({
-            success: true,
-            message: 'Usuário cadastrado com sucesso!'
-        });
-    } catch (error) {
-        console.error('Erro ao atualizar credenciais:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erro interno do servidor'
-        });
-    }
 });
 
 // API - Geração de link único (ATUALIZADA PARA CPF)
@@ -711,11 +543,12 @@ app.post('/api/salvar-prova', (req, res) => {
     
     const [day, month, year] = exam_date.split('/');
     const isoDate = `${year}-${month}-${day}`;
+    const provaId = uuidv4();
     
     db.serialize(() => {
         db.run(
             `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`, [uuidv4(), title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || ''],
+             VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || ''],
             function(err) {
                 if (err) {
                     console.error('Erro ao inserir prova:', err);
@@ -724,8 +557,6 @@ app.post('/api/salvar-prova', (req, res) => {
                         message: 'Erro ao salvar prova: ' + err.message
                     });
                 }
-                
-                const provaId = this.lastID ? this.lastID : uuidv4();
                 
                 if (questions && questions.length > 0) {
                     let questionsProcessed = 0;
@@ -774,6 +605,156 @@ app.post('/api/salvar-prova', (req, res) => {
             }
         );
     });
+});
+
+// API - Submeter respostas da prova
+app.post('/api/exams/:examId/submit', (req, res) => {
+    const examId = req.params.id;
+    const { studentCpf, answers } = req.body;
+    
+    console.log(`Recebendo respostas da prova ${examId} do aluno ${studentCpf}`);
+    
+    // Verificar se o aluno já fez a prova
+    db.get(
+        `SELECT COUNT(*) as count FROM respostas WHERE prova_id = ? AND aluno_cpf = ?`,
+        [examId, studentCpf],
+        (err, row) => {
+            if (err) {
+                console.error('Erro ao verificar tentativa:', err);
+                return res.status(500).json({ error: 'Erro interno do servidor' });
+            }
+            
+            if (row.count > 0) {
+                return res.status(400).json({ error: 'Você já realizou esta prova' });
+            }
+            
+            // Salvar as respostas
+            const respostaData = answers.map(answer => [
+                uuidv4(),
+                examId,
+                studentCpf,
+                answer.questionId,
+                answer.answer,
+                answer.isCorrect ? 1 : 0
+            ]);
+            
+            batchInsert('respostas', ['id', 'prova_id', 'aluno_cpf', 'questao_id', 'resposta', 'correta'], respostaData)
+                .then(() => {
+                    // Calcular nota
+                    db.all(
+                        `SELECT correta FROM respostas WHERE prova_id = ? AND aluno_cpf = ?`,
+                        [examId, studentCpf],
+                        (err, rows) => {
+                            if (err) {
+                                console.error('Erro ao calcular nota:', err);
+                                return res.status(500).json({ error: 'Erro interno do servidor' });
+                            }
+                            
+                            const total = rows.length;
+                            const corretas = rows.filter(row => row.correta === 1).length;
+                            const nota = (corretas / total * 10).toFixed(2);
+                            
+                            // Salvar nota
+                            db.run(
+                                `INSERT INTO notas (id, prova_id, aluno_cpf, nota, data_submissao) VALUES (?, ?, ?, ?, datetime('now'))`,
+                                [uuidv4(), examId, studentCpf, nota],
+                                (err) => {
+                                    if (err) {
+                                        console.error('Erro ao salvar nota:', err);
+                                        return res.status(500).json({ error: 'Erro interno do servidor' });
+                                    }
+                                    
+                                    res.json({
+                                        success: true,
+                                        message: 'Prova submetida com sucesso!',
+                                        nota: nota
+                                    });
+                                }
+                            );
+                        }
+                    );
+                })
+                .catch(err => {
+                    console.error('Erro ao salvar respostas:', err);
+                    res.status(500).json({ error: 'Erro interno do servidor' });
+                });
+        }
+    );
+});
+
+// ===== ROTAS DE PÁGINAS HTML =====
+// Rotas de Login
+app.get(['/', '/login', '/login.html', '/aluno/login', '/aluno/login.html', '/professor/login', '/professor/login.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/login/login.html'));
+});
+
+// Rotas do Aluno
+app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
+});
+
+app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
+});
+
+// Rotas do Professor
+app.get(['/professor', '/professor/dashboard', '/professor/dashboard.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
+});
+
+app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
+});
+
+app.get(['/professor/gerenciar', '/professor/gerenciar.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
+});
+
+app.get(['/professor/resultados', '/professor/resultados.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
+});
+
+// Rotas Institucionais
+app.get(['/cadastro', '/cadastro/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/cadastro/cadastro.html'));
+});
+
+app.get('/contato', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/contato/contato.html'));
+});
+
+app.get('/politica', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/politica/politica.html'));
+});
+
+app.get('/termos', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/termos/termos.html'));
+});
+
+// Rota para arquivos HTML específicos do professor
+app.get('/professor/:page.html', (req, res) => {
+    const page = req.params.page;
+    const filePath = path.join(__dirname, `../frontend/professor/${page}/${page}.html`);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({ error: 'Página não encontrada' });
+    }
+});
+
+// Rota curinga para arquivos HTML - DEVE SER A ÚLTIMA ROTA
+app.get('*.html', (req, res) => {
+    const requestedPath = req.path;
+    const filePath = path.join(__dirname, '../frontend', requestedPath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({
+            error: 'Página não encontrada',
+            path: requestedPath,
+            method: req.method
+        });
+    }
 });
 
 // Rota para acesso via link único (ATUALIZADA PARA CPF)
@@ -837,7 +818,11 @@ app.get('/api/status', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
 });
 
 // ===== MANIPULADORES DE ERRO =====
@@ -857,11 +842,79 @@ app.use((err, req, res, next) => {
     });
 });
 
+// server.js - Adicione estas rotas
+app.post('/api/usuarios/login', (req, res) => {
+    const { cpf, senha, tipo, turma } = req.body;
+    
+    db.get("SELECT * FROM usuarios WHERE cpf = ? AND tipo = ?", [cpf, tipo], (err, row) => {
+        if (err) {
+            return res.json({ success: false, message: 'Erro no servidor' });
+        }
+        
+        if (!row) {
+            return res.json({ success: false, message: 'Usuário não encontrado' });
+        }
+        
+        if (row.senha !== senha) {
+            return res.json({ success: false, message: 'Senha incorreta' });
+        }
+        
+        if (row.turma !== turma) {
+            return res.json({ success: false, message: 'Turma incorreta' });
+        }
+        
+        // Login bem-sucedido
+        res.json({
+            success: true,
+            usuario: {
+                nome: row.nome,
+                cpf: row.cpf,
+                tipo: row.tipo,
+                turma: row.turma
+            }
+        });
+    });
+});
+
+app.post('/api/usuarios/cadastrar', (req, res) => {
+    const { nome, cpf, senha, tipo, turma } = req.body;
+    
+    // Verificar se usuário já existe
+    db.get("SELECT * FROM usuarios WHERE cpf = ?", [cpf], (err, row) => {
+        if (err) {
+            return res.json({ success: false, message: 'Erro no servidor' });
+        }
+        
+        if (row) {
+            return res.json({ success: false, message: 'CPF já cadastrado' });
+        }
+        
+        // Criar novo usuário
+        const id = require('crypto').randomBytes(16).toString('hex');
+        db.run(
+            "INSERT INTO usuarios (id, nome, cpf, senha, tipo, turma) VALUES (?, ?, ?, ?, ?, ?)",
+            [id, nome, cpf, senha, tipo, turma],
+            function(err) {
+                if (err) {
+                    return res.json({ success: false, message: 'Erro ao criar usuário' });
+                }
+                
+                res.json({ 
+                    success: true, 
+                    message: 'Usuário criado com sucesso',
+                    usuario: { nome, cpf, tipo, turma }
+                });
+            }
+        );
+    });
+});
+
 // ===== INICIALIZAÇÃO DO SERVIDOR =====
 app.listen(PORT, () => {
     console.log('🎓 PROVA-ONLINE rodando!');
     console.log(`📍 http://localhost:${PORT}`);
     console.log('📁 Servindo arquivos estáticos de:', path.join(__dirname, '../frontend'));
-    console.log('🔄 Reinicie o servidor com: node server.js');
+    console.log('✅ Rota /api/cadastro disponível');
+    console.log('✅ Rota /api/auth/login disponível');
     console.log('⚡ Modo otimizado ativado - Processamento em lote e fila assíncrona');
 });

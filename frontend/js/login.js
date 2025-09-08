@@ -1,16 +1,5 @@
-// frontend/js/login.js - VERSÃO CORRIGIDA
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== SISTEMA DE LOGIN INICIADO ===');
-    
-    // Verificar se CREDENCIAIS está disponível
-    if (typeof window.CREDENCIAIS === 'undefined') {
-        console.error('CREDENCIAIS não está disponível. Verifique se o arquivo credenciais.js foi carregado.');
-        showError('Erro de configuração do sistema. Recarregue a página.');
-        return;
-    }
-    
-    const CREDENCIAIS = window.CREDENCIAIS;
-    console.log('Credenciais carregadas:', CREDENCIAIS);
     
     const loginForm = document.getElementById('loginForm');
     const tipoAluno = document.getElementById('tipoAluno');
@@ -22,10 +11,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicializar estado dos campos de turma
     if (turmaGroupAluno && turmaGroupProfessor) {
-        if (tipoAluno.checked) {
+        if (tipoAluno && tipoAluno.checked) {
             turmaGroupAluno.style.display = 'block';
             turmaGroupProfessor.style.display = 'none';
-        } else {
+        } else if (tipoProfessor && tipoProfessor.checked) {
             turmaGroupAluno.style.display = 'none';
             turmaGroupProfessor.style.display = 'block';
         }
@@ -71,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Manipular envio do formulário
     if (loginForm) {
-        loginForm.addEventListener('submit', async function(e) {
+        loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
             removeMessages();
             
@@ -94,7 +83,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Senha:', password);
             console.log('Tipo:', tipo);
             console.log('Turma:', turma);
-            console.log('CREDENCIAIS disponível:', typeof window.CREDENCIAIS !== 'undefined');
             
             // Validações
             if (!cpf || !password || !tipo) {
@@ -116,78 +104,100 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Primeiro tenta autenticar via localStorage (mais rápido)
             try {
-                // Preparar os dados para envio
-                const loginData = {
-                    cpf: cpf,
-                    senha: password,
-                    tipo: tipo,
-                    turma: turma
-                };
+                const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+                const usuarioLocal = usuarios.find(user => 
+                    user.cpf === cpf && 
+                    user.senha === password && 
+                    user.tipo === tipo && 
+                    user.turma === turma
+                );
                 
-                // Log para depuração
-                console.log('Enviando dados para login:', loginData);
-                
-                // Fazer a requisição para a API de login
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(loginData)
-                });
-                
-                // Log para depuração
-                console.log('Status da resposta:', response.status);
-                
-                // Verificar se a resposta é JSON
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const text = await response.text();
-                    console.error('Resposta não é JSON:', text);
-                    throw new Error('Resposta do servidor em formato inválido');
-                }
-                
-                const data = await response.json();
-                console.log('Resposta do servidor (JSON):', data);
-                
-                if (data.success) {
-                    // Salva no localStorage
-                    localStorage.setItem('userData', JSON.stringify(data.user));
-                    localStorage.setItem('authToken', data.token);
-                    
-                    showSuccess('Login realizado com sucesso! Redirecionando...');
-                    
-                    setTimeout(() => {
-                        // Redireciona para a página correta
-                        if (tipo === 'aluno') {
-                            window.location.href = data.redirectUrl || '/aluno';
-                        } else {
-                            window.location.href = data.redirectUrl || '/professor';
-                        }
-                    }, 1500);
-                } else {
-                    showError(data.message || 'CPF, senha ou turma incorretos. Por favor, tente novamente.');
+                if (usuarioLocal) {
+                    handleLoginSuccess(usuarioLocal, tipo);
+                    return;
                 }
             } catch (error) {
-                console.error('Erro no login:', error);
-                showError(error.message || 'Erro de conexão. Tente novamente.');
+                console.warn('Erro ao verificar localStorage:', error);
             }
+            
+            // Se não encontrou no localStorage, tenta autenticar via servidor
+            authenticateWithServer(cpf, password, tipo, turma);
         });
+    }
+    
+    // Função para autenticar via servidor
+    function authenticateWithServer(cpf, password, tipo, turma) {
+        fetch('/api/usuarios/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                cpf: cpf,
+                senha: password,
+                tipo: tipo,
+                turma: turma
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.usuario) {
+                // Adicionar usuário ao localStorage para futuros logins
+                const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+                const usuarioExistenteIndex = usuarios.findIndex(user => user.cpf === cpf);
+                
+                if (usuarioExistenteIndex === -1) {
+                    usuarios.push(data.usuario);
+                    localStorage.setItem('usuarios', JSON.stringify(usuarios));
+                }
+                
+                handleLoginSuccess(data.usuario, tipo);
+            } else {
+                showError(data.message || 'CPF, senha, tipo de usuário ou turma incorretos.');
+            }
+        })
+        .catch(error => {
+            console.error('Erro na autenticação:', error);
+            showError('Erro ao conectar com o servidor. Tente novamente.');
+        });
+    }
+    
+    // Função para tratar login bem-sucedido
+    function handleLoginSuccess(usuario, tipo) {
+        console.log('Login bem-sucedido:', usuario);
+        
+        // Salvar dados do usuário logado - CORREÇÃO AQUI
+        localStorage.setItem('usuarioLogado', JSON.stringify(usuario));
+        
+        // Também salva em userData para compatibilidade
+        localStorage.setItem('userData', JSON.stringify({
+            id: usuario.id || usuario.cpf,
+            nome: usuario.nome,
+            cpf: usuario.cpf,
+            tipo: usuario.tipo,
+            turma: usuario.turma
+        }));
+        
+        showSuccess('Login realizado com sucesso! Redirecionando...');
+        
+        setTimeout(() => {
+            // Redireciona para a página correta
+            if (tipo === 'aluno') {
+                window.location.href = '/aluno';
+            } else {
+                window.location.href = '/professor';
+            }
+        }, 1500);
     }
     
     // Funções auxiliares
     function isValidCPF(cpf) {
-        // Remove caracteres não numéricos
         cpf = cpf.replace(/\D/g, '');
-        
-        // Verifica se tem 11 dígitos
         if (cpf.length !== 11) return false;
-        
-        // Verifica se todos os dígitos são iguais (ex: 111.111.111-11)
         if (/^(\d)\1+$/.test(cpf)) return false;
         
-        // Validação do CPF (algoritmo de verificação)
         let soma = 0;
         let resto;
         
@@ -195,7 +205,6 @@ document.addEventListener('DOMContentLoaded', function() {
             soma = soma + parseInt(cpf.substring(i-1, i)) * (11 - i);
         
         resto = (soma * 10) % 11;
-        
         if ((resto === 10) || (resto === 11)) resto = 0;
         if (resto !== parseInt(cpf.substring(9, 10))) return false;
         
@@ -204,7 +213,6 @@ document.addEventListener('DOMContentLoaded', function() {
             soma = soma + parseInt(cpf.substring(i-1, i)) * (12 - i);
         
         resto = (soma * 10) % 11;
-        
         if ((resto === 10) || (resto === 11)) resto = 0;
         if (resto !== parseInt(cpf.substring(10, 11))) return false;
         
@@ -212,7 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function showError(mensagem) {
-        removeMessages(); // Remover mensagens existentes antes de adicionar uma nova
+        removeMessages();
         
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-message message';
@@ -225,7 +233,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.prepend(errorDiv);
         }
         
-        // Remover automaticamente após 5 segundos
         setTimeout(() => {
             if (errorDiv.parentNode) {
                 errorDiv.parentNode.removeChild(errorDiv);
@@ -234,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function showSuccess(mensagem) {
-        removeMessages(); // Remover mensagens existentes antes de adicionar uma nova
+        removeMessages();
         
         const successDiv = document.createElement('div');
         successDiv.className = 'success-message message';
@@ -247,7 +254,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.prepend(successDiv);
         }
         
-        // Remover automaticamente após 5 segundos
         setTimeout(() => {
             if (successDiv.parentNode) {
                 successDiv.parentNode.removeChild(successDiv);

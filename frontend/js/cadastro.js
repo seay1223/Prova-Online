@@ -1,63 +1,73 @@
-// frontend/js/login.js
 document.addEventListener('DOMContentLoaded', function() {
-    const loginForm = document.getElementById('loginForm');
+    const cadastroForm = document.getElementById('cadastroForm');
     const tipoAluno = document.getElementById('tipoAluno');
     const tipoProfessor = document.getElementById('tipoProfessor');
-    const turmaGroupAluno = document.getElementById('turmaGroupAluno');
-    const turmaAluno = document.getElementById('turmaAluno');
-    const turmaGroupProfessor = document.getElementById('turmaGroupProfessor');
-    const turmaProfessor = document.getElementById('turmaProfessor');
-    
+    const turmaGroup = document.getElementById('turmaGroup');
+    const turmaSelect = document.getElementById('turma');
+
     // Mostrar/ocultar campo de turma baseado no tipo de usuário
-    if (tipoAluno && tipoProfessor && turmaGroupAluno && turmaGroupProfessor) {
+    if (tipoAluno && tipoProfessor && turmaGroup) {
         tipoAluno.addEventListener('change', function() {
             if (this.checked) {
-                turmaGroupAluno.style.display = 'block';
-                turmaAluno.setAttribute('required', 'required');
-                turmaGroupProfessor.style.display = 'none';
-                turmaProfessor.removeAttribute('required');
+                turmaGroup.style.display = 'block';
+                turmaSelect.setAttribute('required', 'required');
             }
         });
-        
+
         tipoProfessor.addEventListener('change', function() {
             if (this.checked) {
-                turmaGroupProfessor.style.display = 'block';
-                turmaProfessor.setAttribute('required', 'required');
-                turmaGroupAluno.style.display = 'none';
-                turmaAluno.removeAttribute('required');
+                turmaGroup.style.display = 'none';
+                turmaSelect.removeAttribute('required');
             }
         });
     }
-    
-    if (loginForm) {
-        loginForm.addEventListener('submit', async function(e) {
+
+    // Adicionar máscara de CPF
+    const cpfInput = document.getElementById('cpf');
+    if (cpfInput) {
+        cpfInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length > 11) value = value.slice(0, 11);
+            
+            if (value.length <= 11) {
+                value = value.replace(/(\d{3})(\d)/, '$1.$2');
+                value = value.replace(/(\d{3})(\d)/, '$1.$2');
+                value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            }
+            
+            e.target.value = value;
+        });
+    }
+
+    // Manipular envio do formulário
+    if (cadastroForm) {
+        cadastroForm.addEventListener('submit', function(e) {
             e.preventDefault();
             removeMessages();
             
+            const nome = document.getElementById('nome').value.trim();
             const cpf = document.getElementById('cpf').value.trim().replace(/\D/g, '');
             const password = document.getElementById('password').value.trim();
             const tipoElement = document.querySelector('input[name="tipo"]:checked');
             const tipo = tipoElement ? tipoElement.value : null;
+            const turma = tipo === 'aluno' ? document.getElementById('turma').value : null;
+            const terms = document.getElementById('terms').checked;
             
-            // Obter a turma correta baseada no tipo de usuário
-            let turma = null;
-            if (tipo === 'aluno') {
-                turma = document.getElementById('turmaAluno').value;
-            } else if (tipo === 'professor') {
-                turma = document.getElementById('turmaProfessor').value;
-            }
+            console.log('=== DADOS DO CADASTRO ===');
+            console.log('Nome:', nome);
+            console.log('CPF:', cpf);
+            console.log('Tipo:', tipo);
+            console.log('Turma:', turma);
+            console.log('Termos aceitos:', terms);
             
-            if (!cpf || !password || !tipo) {
-                showError('Por favor, preencha todos os campos e selecione o tipo de usuário.');
+            // Validações
+            if (!nome || !cpf || !password || !tipo || !terms) {
+                showError('Por favor, preencha todos os campos obrigatórios.');
                 return;
             }
             
-            if (!turma) {
-                if (tipo === 'aluno') {
-                    showError('Por favor, selecione sua turma.');
-                } else {
-                    showError('Por favor, selecione a turma para acessar.');
-                }
+            if (tipo === 'aluno' && !turma) {
+                showError('Por favor, selecione sua turma.');
                 return;
             }
             
@@ -67,49 +77,45 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             try {
-                // Fazer a requisição para a API de login
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        cpf: cpf,
-                        senha: password,
-                        tipo: tipo,
-                        turma: turma
-                    })
-                });
+                // Preparar os dados para armazenamento
+                const userData = {
+                    nome: nome,
+                    cpf: cpf,
+                    senha: password,
+                    tipo: tipo,
+                    turma: turma
+                };
                 
-                // Verificar se a resposta é OK antes de tentar converter para JSON
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Erro na autenticação');
+                console.log('Salvando dados do usuário:', userData);
+                
+                // Obter usuários existentes do localStorage
+                const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+                
+                // Verificar se o CPF já está cadastrado
+                const usuarioExistente = usuarios.find(user => user.cpf === cpf);
+                if (usuarioExistente) {
+                    showError('Este CPF já está cadastrado.');
+                    return;
                 }
                 
-                const data = await response.json();
+                // Adicionar novo usuário
+                usuarios.push(userData);
                 
-                if (data.success) {
-                    // Salva no localStorage
-                    localStorage.setItem('userData', JSON.stringify(data.user));
-                    localStorage.setItem('authToken', data.token);
-                    
-                    showSuccess('Login realizado com sucesso! Redirecionando...');
-                    
-                    setTimeout(() => {
-                        // Redireciona para a página correta
-                        if (tipo === 'aluno') {
-                            window.location.href = '/aluno';
-                        } else {
-                            window.location.href = '/professor';
-                        }
-                    }, 1500);
-                } else {
-                    showError(data.message || 'CPF, senha ou turma incorretos. Por favor, tente novamente.');
-                }
+                // Salvar no localStorage
+                localStorage.setItem('usuarios', JSON.stringify(usuarios));
+                
+                console.log('Usuário cadastrado com sucesso!');
+                console.log('Total de usuários cadastrados:', usuarios.length);
+                
+                showSuccess('Cadastro realizado com sucesso! Redirecionando para login...');
+                
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+                
             } catch (error) {
-                console.error('Erro no login:', error);
-                showError(error.message || 'Erro de conexão. Tente novamente.');
+                console.error('Erro no cadastro:', error);
+                showError('Erro ao salvar dados. Tente novamente.');
             }
         });
     }
@@ -150,25 +156,55 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function showError(mensagem) {
-        removeMessages(); // Remover mensagens existentes antes de adicionar uma nova
+        removeMessages();
         
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-message message';
         errorDiv.textContent = mensagem;
-        loginForm.prepend(errorDiv);
+        errorDiv.style.cssText = 'background-color: #ffebee; color: #c62828; padding: 12px; border-radius: 4px; margin-bottom: 16px; border: 1px solid #ef5350;';
+        
+        if (cadastroForm) {
+            cadastroForm.prepend(errorDiv);
+        } else {
+            document.body.prepend(errorDiv);
+        }
+        
+        // Remover automaticamente após 5 segundos
+        setTimeout(() => {
+            if (errorDiv.parentNode) {
+                errorDiv.parentNode.removeChild(errorDiv);
+            }
+        }, 5000);
     }
     
     function showSuccess(mensagem) {
-        removeMessages(); // Remover mensagens existentes antes de adicionar uma nova
+        removeMessages();
         
         const successDiv = document.createElement('div');
         successDiv.className = 'success-message message';
         successDiv.textContent = mensagem;
-        loginForm.prepend(successDiv);
+        successDiv.style.cssText = 'background-color: #e8f5e9; color: #2e7d32; padding: 12px; border-radius: 4px; margin-bottom: 16px; border: 1px solid #66bb6a;';
+        
+        if (cadastroForm) {
+            cadastroForm.prepend(successDiv);
+        } else {
+            document.body.prepend(successDiv);
+        }
+        
+        // Remover automaticamente após 5 segundos
+        setTimeout(() => {
+            if (successDiv.parentNode) {
+                successDiv.parentNode.removeChild(successDiv);
+            }
+        }, 5000);
     }
     
     function removeMessages() {
         const messages = document.querySelectorAll('.message');
-        messages.forEach(msg => msg.remove());
+        messages.forEach(msg => {
+            if (msg.parentNode) {
+                msg.parentNode.removeChild(msg);
+            }
+        });
     }
 });

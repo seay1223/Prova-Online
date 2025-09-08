@@ -1,8 +1,52 @@
-// aluno.js - Página do aluno (ATUALIZADO PARA CPF)
-console.log('aluno.js carregado - versão com CPF');
+// aluno.js - Página do aluno (CORRIGIDO)
+console.log('aluno.js carregado - versão corrigida');
 
-// Serviço simplificado para comunicação com a API
+// Serviço para comunicação com a API
 window.serverService = {
+    // Buscar dados do usuário
+    getUserData: async function() {
+        try {
+            // Primeiro tenta pegar do localStorage
+            const usuarioLogado = localStorage.getItem('usuarioLogado');
+            if (usuarioLogado) {
+                return JSON.parse(usuarioLogado);
+            }
+            
+            // Se não encontrar, tenta pela API
+            const token = localStorage.getItem('authToken');
+            if (!token) return null;
+            
+            console.log('Buscando dados do usuário...');
+            const response = await fetch('/api/user/data', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.status === 401) {
+                console.log('Token inválido ou expirado');
+                localStorage.removeItem('usuarioLogado');
+                localStorage.removeItem('userData');
+                localStorage.removeItem('authToken');
+                window.location.href = '/login';
+                return null;
+            }
+            
+            if (!response.ok) {
+                throw new Error(`Erro HTTP ${response.status} ao buscar dados do usuário`);
+            }
+            
+            const data = await response.json();
+            console.log('Dados do usuário recebidos:', data);
+            return data;
+            
+        } catch (error) {
+            console.error('Erro ao buscar dados do usuário:', error);
+            return null;
+        }
+    },
+    
     // Buscar provas disponíveis
     getAvailableExams: async function() {
         try {
@@ -22,6 +66,7 @@ window.serverService = {
             
             if (response.status === 401) {
                 console.log('Token inválido ou expirado');
+                localStorage.removeItem('usuarioLogado');
                 localStorage.removeItem('userData');
                 localStorage.removeItem('authToken');
                 window.location.href = '/login';
@@ -64,14 +109,14 @@ window.serverService = {
 };
 
 // Função principal quando o documento carrega
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     console.log('Página do aluno carregando...');
     
-    // Verificar autenticação
-    const userData = localStorage.getItem('userData');
+    // Verificar autenticação - CORREÇÃO AQUI: usar usuarioLogado
+    const usuarioLogado = localStorage.getItem('usuarioLogado');
     const authToken = localStorage.getItem('authToken');
 
-    if (!userData || !authToken) {
+    if (!usuarioLogado || !authToken) {
         console.log('Usuário não logado. Redirecionando...');
         alert('Você precisa estar logado para acessar esta página!');
         window.location.href = '/login';
@@ -79,16 +124,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     try {
-        const user = JSON.parse(userData);
-        console.log('Usuário:', user);
+        // Primeiro tenta usar dados do localStorage
+        let user = JSON.parse(usuarioLogado);
         
-        // Verificar tipo de usuário
+        // Se não conseguir, tenta buscar dados atualizados
+        if (!user) {
+            user = await serverService.getUserData();
+        }
+        
+        if (!user) {
+            throw new Error('Não foi possível carregar dados do usuário');
+        }
+        
+        console.log('Usuário carregado:', user);
+        
+        // Verificar tipo de usuário - CORREÇÃO: compatibilidade com diferentes nomes de campo
         const userType = user.tipo || user.type || user.role;
         if (userType !== 'aluno' && userType !== 'student') {
             alert('Acesso restrito a alunos.');
             window.location.href = '/dashboard';
             return;
         }
+        
+        // Garantir que userData também está salvo para compatibilidade
+        localStorage.setItem('userData', JSON.stringify({
+            id: user.id || user.cpf,
+            nome: user.nome,
+            cpf: user.cpf,
+            tipo: user.tipo,
+            turma: user.turma
+        }));
         
         // Exibir informações do usuário
         updateUserInfo(user);
@@ -104,11 +169,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Configurar event listeners
     setupEventListeners();
+    
+    // Adicionar estilos
+    addStyles();
 });
 
 // Atualizar informações do usuário na interface
 function updateUserInfo(user) {
-    const userName = user.name || user.nome || 'Aluno';
+    // CORREÇÃO: Buscar nome de diferentes campos possíveis
+    const userName = user.nome || user.name || 'Aluno';
     const userCpf = user.cpf || '';
     const formattedCpf = formatCPF(userCpf);
     
@@ -133,6 +202,7 @@ function setupEventListeners() {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', function() {
             if (confirm('Tem certeza que deseja sair?')) {
+                localStorage.removeItem('usuarioLogado');
                 localStorage.removeItem('userData');
                 localStorage.removeItem('authToken');
                 window.location.href = '/login';
@@ -150,30 +220,105 @@ function setupEventListeners() {
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
-            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const userData = JSON.parse(localStorage.getItem('usuarioLogado') || '{}');
             loadAvailableExams(userData.cpf);
         });
     }
 }
 
-// Restante do código permanece igual, exceto pela função realizarProva
-// que precisa ser atualizada para usar CPF em vez de email
+// Carregar provas disponíveis
+async function loadAvailableExams(studentCpf) {
+    console.log('Carregando provas para o aluno:', studentCpf);
+    showLoading('Carregando provas disponíveis...');
+    
+    try {
+        const provas = await serverService.getAvailableExams();
+        hideLoading();
+        
+        if (provas.length === 0) {
+            showNoExamsMessage();
+            return;
+        }
+        
+        renderProvas(provas, studentCpf);
+    } catch (error) {
+        console.error('Erro ao carregar provas:', error);
+        hideLoading();
+        showError('Erro ao carregar provas. Tente novamente.');
+    }
+}
+
+// Renderizar lista de provas
+function renderProvas(provas, studentCpf) {
+    const provasContainer = document.getElementById('provasContainer');
+    if (!provasContainer) return;
+    
+    provasContainer.innerHTML = '';
+    
+    provas.forEach(prova => {
+        const provaElement = createProvaElement(prova, studentCpf);
+        provasContainer.appendChild(provaElement);
+    });
+}
+
+// Criar elemento de prova
+function createProvaElement(prova, studentCpf) {
+    const card = document.createElement('div');
+    card.className = 'prova-card';
+    
+    // Verificar se a prova expirou
+    const agora = new Date();
+    const dataFim = new Date(prova.dataFim || prova.endDate);
+    const expirada = agora > dataFim;
+    
+    if (expirada) {
+        card.classList.add('expirada');
+    }
+    
+    // Formatar datas para exibição
+    const dataInicioFormatada = formatDate(prova.dataInicio || prova.startDate);
+    const dataFimFormatada = formatDate(prova.dataFim || prova.endDate);
+    
+    card.innerHTML = `
+        <div class="prova-header">
+            <h3 class="prova-titulo">${prova.titulo || prova.title}</h3>
+            ${expirada ? '<span class="badge-expirada">Expirada</span>' : ''}
+        </div>
+        
+        <p class="prova-descricao">${prova.descricao || prova.description || 'Sem descrição'}</p>
+        
+        <div class="prova-info">
+            <span><i class="fas fa-clock"></i> ${prova.duracao || prova.duration} minutos</span>
+            <span><i class="fas fa-calendar"></i> Início: ${dataInicioFormatada}</span>
+            <span><i class="fas fa-calendar-times"></i> Fim: ${dataFimFormatada}</span>
+        </div>
+        
+        <div class="prova-actions">
+            ${expirada ? 
+                '<button class="btn-realizar btn-disabled" disabled>Prova Expirada</button>' : 
+                '<button class="btn-realizar" onclick="realizarProva(\'' + prova.id + '\')">Realizar Prova</button>'
+            }
+        </div>
+    `;
+    
+    return card;
+}
 
 // Iniciar prova
 async function realizarProva(provaId) {
     console.log('Iniciando prova:', provaId);
     
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const usuarioLogado = JSON.parse(localStorage.getItem('usuarioLogado') || '{}');
     const authToken = localStorage.getItem('authToken');
     
-    if (!userData.cpf || !authToken) {
+    if (!usuarioLogado.cpf || !authToken) {
         alert('Erro de autenticação. Faça login novamente.');
         window.location.href = '/login';
         return;
     }
     
     try {
-        const attemptCheck = await serverService.checkExamAttempt(provaId, userData.cpf);
+        const attemptCheck = await serverService.checkExamAttempt(provaId, usuarioLogado.cpf);
         
         if (attemptCheck.attempted) {
             if (confirm('Você já realizou esta prova. Deseja ver o resultado?')) {
@@ -188,13 +333,58 @@ async function realizarProva(provaId) {
     }
 }
 
-// Função global para recarregar
-window.recarregarProvas = function() {
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    loadAvailableExams(userData.cpf);
-};
+// Funções auxiliares
+function formatDate(dateString) {
+    const options = { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleString('pt-BR', options);
+}
 
-// Restante do código permanece igual...
+function filterProvas() {
+    const searchInput = document.getElementById('searchInput');
+    const searchTerm = searchInput.value.toLowerCase();
+    const provas = document.querySelectorAll('.prova-card');
+    
+    provas.forEach(prova => {
+        const titulo = prova.querySelector('.prova-titulo').textContent.toLowerCase();
+        const descricao = prova.querySelector('.prova-descricao').textContent.toLowerCase();
+        
+        if (titulo.includes(searchTerm) || descricao.includes(searchTerm)) {
+            prova.style.display = 'block';
+        } else {
+            prova.style.display = 'none';
+        }
+    });
+}
+
+function handleAuthError() {
+    localStorage.removeItem('usuarioLogado');
+    localStorage.removeItem('userData');
+    localStorage.removeItem('authToken');
+    alert('Erro de autenticação. Redirecionando para login...');
+    window.location.href = '/login';
+}
+
+function showNoExamsMessage() {
+    const provasContainer = document.getElementById('provasContainer');
+    if (provasContainer) {
+        provasContainer.innerHTML = `
+            <div class="no-results">
+                <i class="fas fa-clipboard-list"></i>
+                <p>Nenhuma prova disponível no momento.</p>
+                <button onclick="recarregarProvas()">
+                    <i class="fas fa-sync-alt"></i> Recarregar
+                </button>
+            </div>
+        `;
+    }
+}
+
 // Mostrar loading
 function showLoading(message) {
     hideLoading();
@@ -434,13 +624,10 @@ function addStyles() {
     document.head.appendChild(styles);
 }
 
-// Inicializar estilos
-addStyles();
-
 // Função global para recarregar
 window.recarregarProvas = function() {
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    loadAvailableExams(userData.id || userData.email);
+    const usuarioLogado = JSON.parse(localStorage.getItem('usuarioLogado') || '{}');
+    loadAvailableExams(usuarioLogado.cpf);
 };
 
 console.log('aluno.js inicializado com sucesso');
