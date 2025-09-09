@@ -110,7 +110,7 @@ const processingQueue = {
     }
 };
 
-// ===== FUNÇÕES UTILITÁRIAS =====
+// ===== FUNÇÓES UTILITÁRIAS =====
 function batchInsert(table, columns, data, batchSize = 50) {
     return new Promise((resolve, reject) => {
         const batches = [];
@@ -212,7 +212,6 @@ app.get('/api/user/data', async (req, res) => {
     }
 });
 
-// API - Cadastro de usuários
 // API - Cadastro de usuários
 app.post('/api/cadastro', (req, res) => {
     const { nome, cpf, senha, tipo, turma } = req.body;
@@ -478,47 +477,65 @@ app.get('/api/exams/:id', (req, res) => {
 });
 
 // API - Geração de link único (ATUALIZADA PARA CPF)
-app.post('/api/gerar-link-unico', (req, res) => {
+app.post('/api/gerar-link-unico', requireProfessorAuth, (req, res) => {
     const { prova_id, aluno_cpf } = req.body;
+    
+    // Verificar se o professor tem permissão para esta prova
     db.get(
-        `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_cpf = ?`, [prova_id, aluno_cpf],
-        (err, row) => {
+        `SELECT * FROM provas WHERE id = ? AND professor_cpf = ?`, 
+        [prova_id, req.session.user.cpf],
+        (err, prova) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            if (row) {
-                return res.json({
-                    link_unico: row.link_unico,
-                    message: 'Link único já existente'
-                });
-            } else {
-                const linkUnico = uuidv4();
-                db.run(
-                    `INSERT INTO links_unicos (prova_id, aluno_cpf, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, [prova_id, aluno_cpf, linkUnico],
-                    function(err) {
-                        if (err) {
-                            return res.status(500).json({ error: err.message });
-                        }
-                        res.json({
-                            link_unico: linkUnico,
-                            message: 'Link único gerado com sucesso!'
-                        });
-                    }
-                );
+            if (!prova) {
+                return res.status(403).json({ error: 'Você não tem permissão para acessar esta prova' });
             }
+            
+            db.get(
+                `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_cpf = ?`, 
+                [prova_id, aluno_cpf],
+                (err, row) => {
+                    if (err) {
+                        return res.status(500).json({ error: err.message });
+                    }
+                    if (row) {
+                        return res.json({
+                            link_unico: row.link_unico,
+                            message: 'Link único já existente'
+                        });
+                    } else {
+                        const linkUnico = uuidv4();
+                        db.run(
+                            `INSERT INTO links_unicos (prova_id, aluno_cpf, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, 
+                            [prova_id, aluno_cpf, linkUnico],
+                            function(err) {
+                                if (err) {
+                                    return res.status(500).json({ error: err.message });
+                                }
+                                res.json({
+                                    link_unico: linkUnico,
+                                    message: 'Link único gerado com sucesso!'
+                                });
+                            }
+                        );
+                    }
+                }
+            );
         }
     );
 });
 
 // API - CRUD Provas
-app.post('/api/provas', async(req, res) => {
+app.post('/api/provas', requireProfessorAuth, async(req, res) => {
     const { titulo, disciplina, data_limite, tempo_limite, descricao, questões, alunos } = req.body;
     const provaId = uuidv4();
     
     try {
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, titulo, disciplina, 'professor_cpf_aqui', data_limite, tempo_limite, descricao],
+                `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+                [provaId, titulo, disciplina, req.session.user.cpf, data_limite, tempo_limite, descricao],
                 function(err) {
                     if (err) reject(err);
                     else resolve();
@@ -604,7 +621,7 @@ app.post('/api/provas', async(req, res) => {
 });
 
 // API - Salvar prova (compatibilidade)
-app.post('/api/salvar-prova', (req, res) => {
+app.post('/api/salvar-prova', requireProfessorAuth, (req, res) => {
     const { title, description, duration, exam_date, questions } = req.body;
     console.log('Recebendo dados da prova:', { title, description, duration, exam_date, questions });
     
@@ -622,7 +639,8 @@ app.post('/api/salvar-prova', (req, res) => {
     db.serialize(() => {
         db.run(
             `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || ''],
+             VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+            [provaId, title, 'Geral', req.session.user.cpf, isoDate, duration, description || ''],
             function(err) {
                 if (err) {
                     console.error('Erro ao inserir prova:', err);
@@ -683,7 +701,7 @@ app.post('/api/salvar-prova', (req, res) => {
 
 // API - Submeter respostas da prova
 app.post('/api/exams/:examId/submit', (req, res) => {
-    const examId = req.params.id;
+    const examId = req.params.examId;
     const { studentCpf, answers } = req.body;
     
     console.log(`Recebendo respostas da prova ${examId} do aluno ${studentCpf}`);
@@ -804,7 +822,7 @@ app.post('/api/usuarios/cadastrar', (req, res) => {
         }
         
         // Criar novo usuário
-        const id = require('crypto').randomBytes(16).toString('hex');
+        const id = crypto.randomBytes(16).toString('hex');
         db.run(
             "INSERT INTO usuarios (id, nome, cpf, senha, tipo, turma) VALUES (?, ?, ?, ?, ?, ?)",
             [id, nome, cpf, senha, tipo, turma],

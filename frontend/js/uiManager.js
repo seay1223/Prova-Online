@@ -1,6 +1,6 @@
-// uiManager.js - Gerenciamento de interface do usuário
+// uiManager.js - Gerenciamento de interface do usuário (versão corrigida)
 
-export class UIManager {
+class UIManager {
     constructor() {
         this.notificationTimeout = null;
     }
@@ -286,7 +286,7 @@ export class UIManager {
 }
 
 // Instância global
-export const uiManager = new UIManager();
+const uiManager = new UIManager();
 
 // Estilos inline para componentes UI
 const styles = `
