@@ -12,6 +12,7 @@ import session from 'express-session';
 // Configuração do __dirname para ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 const app = express();
 const PORT = 3000;
 
@@ -159,7 +160,7 @@ app.use(session({
         secure: false, // false para localhost
         maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
-        domain: 'localhost' // Adicionado para garantir que o cookie funcione em localhost
+        sameSite: 'lax' // Adicionado para melhor compatibilidade
     }
 }));
 
@@ -244,6 +245,30 @@ function requireProfessorAuth(req, res, next) {
         // Redireciona para login se não estiver autenticado
         res.redirect('/login/?error=Acesso restrito a professores');
     }
+}
+
+// Middleware alternativo para verificar autenticação
+function checkAuth(req, res, next) {
+    console.log('[AUTH CHECK] Verificando autenticação...');
+    
+    // Verificar se há usuário na sessão
+    if (req.session && req.session.user) {
+        console.log('[AUTH CHECK] Usuário encontrado na sessão:', req.session.user);
+        req.user = req.session.user;
+        return next();
+    }
+    
+    // Se não houver sessão, verificar se é uma requisição API
+    if (req.xhr || req.path.startsWith('/api/')) {
+        return res.status(401).json({ 
+            error: 'Não autenticado',
+            redirect: '/login/'
+        });
+    }
+    
+    // Para rotas de páginas, redirecionar para login
+    console.log('[AUTH CHECK] Nenhuma sessão encontrada, redirecionando...');
+    res.redirect('/login/?error=Sessão expirada');
 }
 
 // ===== SISTEMA DE FILA =====
@@ -352,8 +377,16 @@ app.get('/api/user/data', async (req, res) => {
             return res.status(401).json({ error: 'Dados do usuário não encontrados' });
         }
         
-        // Buscar usuário no banco de dados
-        const user = await db.get("SELECT * FROM usuarios WHERE cpf = ?", [userData.cpf]);
+        // Buscar usuário no arquivo JSON
+        const usuariosPath = path.join(__dirname, 'usuario.json');
+        let usuarios = [];
+        
+        if (fs.existsSync(usuariosPath)) {
+            const data = fs.readFileSync(usuariosPath, 'utf8');
+            usuarios = JSON.parse(data);
+        }
+        
+        const user = usuarios.find(u => u.cpf === userData.cpf);
         
         if (!user) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -369,12 +402,11 @@ app.get('/api/user/data', async (req, res) => {
     }
 });
 
-// API - Cadastro de usuários
-// API - Cadastro de usuários
-app.post('/api/cadastro', (req, res) => {
+// API - Cadastro de usuários (SALVANDO NO ARQUIVO JSON)
+app.post('/api/cadastro', async (req, res) => {
     const { nome, cpf, senha, tipo, turma } = req.body;
     
-    console.log('=== TENTATIVA DE CADASTRO ===');
+    console.log('=== TENTATIVA DE CADASTRO NO ARQUIVO JSON ===');
     console.log('Nome:', nome);
     console.log('CPF:', cpf);
     console.log('Tipo:', tipo);
@@ -405,8 +437,17 @@ app.post('/api/cadastro', (req, res) => {
             });
         }
         
-        // Verificar se o CPF já existe no banco de dados
-        const existingUser = await db.get("SELECT * FROM usuarios WHERE cpf = ?", [cpf]);
+        // Ler usuários existentes do arquivo
+        const usuariosPath = path.join(__dirname, 'usuario.json');
+        let usuarios = [];
+        
+        if (fs.existsSync(usuariosPath)) {
+            const data = fs.readFileSync(usuariosPath, 'utf8');
+            usuarios = JSON.parse(data);
+        }
+        
+        // Verificar se o CPF já existe
+        const existingUser = usuarios.find(u => u.cpf === cpf);
         if (existingUser) {
             return res.status(400).json({
                 success: false,
@@ -414,14 +455,22 @@ app.post('/api/cadastro', (req, res) => {
             });
         }
         
-        // Criar novo usuário no banco de dados
-        const id = uuidv4();
-        await db.run(
-            "INSERT INTO usuarios (id, nome, cpf, senha, tipo, turma) VALUES (?, ?, ?, ?, ?, ?)",
-            [id, nome, cpf, senha, tipo, turma || null]
-        );
+        // Criar novo usuário
+        const novoUsuario = {
+            id: uuidv4(),
+            nome,
+            cpf,
+            senha,
+            tipo,
+            turma: tipo === 'aluno' ? turma : null,
+            dataCadastro: new Date().toISOString()
+        };
         
-        console.log('Usuário cadastrado com sucesso:', { id, nome, cpf, tipo, turma });
+        // Adicionar ao array e salvar no arquivo
+        usuarios.push(novoUsuario);
+        fs.writeFileSync(usuariosPath, JSON.stringify(usuarios, null, 2));
+        
+        console.log('Usuário cadastrado com sucesso:', novoUsuario);
         
         res.json({
             success: true,
@@ -437,37 +486,30 @@ app.post('/api/cadastro', (req, res) => {
     }
 });
 
-// API - Autenticação (SOLUÇÃO SIMPLES TEMPORÁRIA)
+// API - Autenticação (USANDO ARQUIVO usuario.json) - MODIFICADA
 app.post('/api/auth/login', async (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
     
-    console.log('=== TENTATIVA DE LOGIN COM SESSÃO ===');
+    console.log('=== TENTATIVA DE LOGIN COM ARQUIVO JSON ===');
     console.log('CPF:', cpf);
     console.log('Tipo:', tipo);
     console.log('Turma:', turma);
     
     try {
-        // USUÁRIOS FIXOS PARA TESTE - REMOVA DEPOIS!
-        const usuariosTeste = [
-            {
-                id: '1',
-                nome: 'Professor Teste',
-                cpf: '12345678901',
-                senha: 'senha123',
-                tipo: 'professor',
-                turma: '3A'
-            },
-            {
-                id: '2',
-                nome: 'Aluno Teste',
-                cpf: '10987654321',
-                senha: 'senha123',
-                tipo: 'aluno',
-                turma: '3A'
-            }
-        ];
+        // Ler usuários do arquivo JSON
+        const usuariosPath = path.join(__dirname, 'usuario.json');
+        let usuarios = [];
         
-        const usuario = usuariosTeste.find(u => u.cpf === cpf && u.tipo === tipo);
+        if (fs.existsSync(usuariosPath)) {
+            const data = fs.readFileSync(usuariosPath, 'utf8');
+            usuarios = JSON.parse(data);
+            console.log('Usuários carregados do arquivo:', usuarios);
+        } else {
+            console.log('Arquivo usuario.json não encontrado, usando array vazio');
+        }
+        
+        // Buscar usuário no array
+        const usuario = usuarios.find(u => u.cpf === cpf && u.tipo === tipo);
         
         if (usuario) {
             if (usuario.senha === senha) {
@@ -483,6 +525,8 @@ app.post('/api/auth/login', async (req, res) => {
                 delete userSession.senha;
                 
                 req.session.user = userSession;
+                
+                // Forçar salvamento da sessão
                 req.session.save((err) => {
                     if (err) {
                         console.error('Erro ao salvar sessão:', err);
@@ -492,15 +536,17 @@ app.post('/api/auth/login', async (req, res) => {
                         });
                     }
                     
-                    console.log('Sessão salva:', req.session.user);
+                    console.log('Sessão salva com sucesso:', req.session.user);
                     
                     res.json({
                         success: true,
                         message: 'Login realizado com sucesso!',
                         user: userSession,
-                        redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
+                        redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor',
+                        sessionId: req.sessionID // Enviar session ID para debug
                     });
                 });
+                
             } else {
                 res.status(401).json({
                     success: false,
@@ -517,7 +563,7 @@ app.post('/api/auth/login', async (req, res) => {
         console.error('Erro no login:', error);
         res.status(500).json({
             success: false,
-            message: 'Erro interno do servidor'
+            message: 'Erro interno do servidor: ' + error.message
         });
     }
 });
@@ -609,37 +655,36 @@ app.get('/api/exams/:id', async (req, res) => {
     }
 });
 
-// API - Geração de link único (ATUALIZADA PARA CPF)
-app.post('/api/gerar-link-unico', (req, res) => {
+// API - Geração de link único (ATUALIZADA PARA CPF) - CORRIGIDA
+app.post('/api/gerar-link-unico', async (req, res) => {
     const { prova_id, aluno_cpf } = req.body;
-    db.get(
-        `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_cpf = ?`, [prova_id, aluno_cpf],
-        (err, row) => {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            if (row) {
-                return res.json({
-                    link_unico: row.link_unico,
-                    message: 'Link único já existente'
-                });
-            } else {
-                const linkUnico = uuidv4();
-                db.run(
-                    `INSERT INTO links_unicos (prova_id, aluno_cpf, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, [prova_id, aluno_cpf, linkUnico],
-                    function(err) {
-                        if (err) {
-                            return res.status(500).json({ error: err.message });
-                        }
-                        res.json({
-                            link_unico: linkUnico,
-                            message: 'Link único gerado com sucesso!'
-                        });
-                    }
-                );
-            }
+    
+    try {
+        const row = await db.get(
+            `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_cpf = ?`, 
+            [prova_id, aluno_cpf]
+        );
+        
+        if (row) {
+            return res.json({
+                link_unico: row.link_unico,
+                message: 'Link único já existente'
+            });
+        } else {
+            const linkUnico = uuidv4();
+            await db.run(
+                `INSERT INTO links_unicos (prova_id, aluno_cpf, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, 
+                [prova_id, aluno_cpf, linkUnico]
+            );
+            
+            res.json({
+                link_unico: linkUnico,
+                message: 'Link único gerado com sucesso!'
+            });
         }
-    );
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // API - CRUD Provas
@@ -735,8 +780,8 @@ app.post('/api/provas', requireProfessorAuth, async(req, res) => {
     }
 });
 
-// API - Salvar prova (compatibilidade)
-app.post('/api/salvar-prova', (req, res) => {
+// API - Salvar prova (compatibilidade) - CORRIGIDA
+app.post('/api/salvar-prova', async (req, res) => {
     const { title, description, duration, exam_date, questions } = req.body;
     console.log('Recebendo dados da prova:', { title, description, duration, exam_date, questions });
     
@@ -752,69 +797,58 @@ app.post('/api/salvar-prova', (req, res) => {
         const isoDate = `${year}-${month}-${day}`;
         const provaId = uuidv4();
         
+        // Usar await com db.run
         await db.run(
             `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || ''],
-            function(err) {
-                if (err) {
-                    console.error('Erro ao inserir prova:', err);
-                    return res.status(500).json({
-                        success: false,
-                        message: 'Erro ao salvar prova: ' + err.message
-                    });
-                }
+             VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+            [provaId, title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || '']
+        );
+        
+        if (questions && questions.length > 0) {
+            for (const [index, question] of questions.entries()) {
+                const questaoId = uuidv4();
                 
-                if (questions && questions.length > 0) {
-                    let questionsProcessed = 0;
-                    questions.forEach((question, index) => {
-                        const questaoId = uuidv4();
-                        db.run(
-                            `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) 
-                             VALUES (?, ?, ?, ?, ?, ?)`, [questaoId, provaId, question.type, question.text, question.value || 1.0, index],
-                            function(err) {
-                                if (err) {
-                                    console.error('Erro ao inserir questão:', err);
-                                    return;
-                                }
-                                
-                                if ((question.type === 'multipla_escolha' || question.type === 'verdadeiro_falso') &&
-                                    question.alternatives) {
-                                    question.alternatives.forEach((alternative, altIndex) => {
-                                        const isCorrect = question.type === 'verdadeiro_falso' ?
-                                            alternative === question.correctAnswer :
-                                            altIndex === question.correctAnswer;
-                                        db.run(
-                                            `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) 
-                                             VALUES (?, ?, ?, ?, ?)`, [uuidv4(), questaoId, alternative, isCorrect ? 1 : 0, altIndex]
-                                        );
-                                    });
-                                }
-                                
-                                questionsProcessed++;
-                                if (questionsProcessed === questions.length) {
-                                    res.json({
-                                        success: true,
-                                        message: 'Prova salva com sucesso!',
-                                        examId: provaId
-                                    });
-                                }
-                            }
+                await db.run(
+                    `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) 
+                     VALUES (?, ?, ?, ?, ?, ?)`, 
+                    [questaoId, provaId, question.type, question.text, question.value || 1.0, index]
+                );
+                
+                if ((question.type === 'multipla_escolha' || question.type === 'verdadeiro_falso') &&
+                    question.alternatives) {
+                    
+                    for (const [altIndex, alternative] of question.alternatives.entries()) {
+                        const isCorrect = question.type === 'verdadeiro_falso' ?
+                            alternative === question.correctAnswer :
+                            altIndex === question.correctAnswer;
+                        
+                        await db.run(
+                            `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) 
+                             VALUES (?, ?, ?, ?, ?)`, 
+                            [uuidv4(), questaoId, alternative, isCorrect ? 1 : 0, altIndex]
                         );
-                    });
-                } else {
-                    res.json({
-                        success: true,
-                        message: 'Prova salva com sucesso!',
-                        examId: provaId
-                    });
+                    }
                 }
             }
-        );
-    });
+        }
+        
+        res.json({
+            success: true,
+            message: 'Prova salva com sucesso!',
+            examId: provaId
+        });
+        
+    } catch (error) {
+        console.error('Erro ao salvar prova:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno do servidor: ' + error.message
+        });
+    }
 });
 
-// API - Submeter respostas da prova
-app.post('/api/exams/:examId/submit', (req, res) => {
+// API - Submeter respostas da prova - CORRIGIDA
+app.post('/api/exams/:examId/submit', async (req, res) => {
     const examId = req.params.id;
     const { studentCpf, answers } = req.body;
     
@@ -830,18 +864,15 @@ app.post('/api/exams/:examId/submit', (req, res) => {
         if (row.count > 0) {
             return res.status(400).json({ error: 'Você já realizou esta prova' });
         }
-      
-        // Salvar as respostas
-        const respostaData = answers.map(answer => [
-            uuidv4(),
-            examId,
-            studentCpf,
-            answer.questionId,
-            answer.answer,
-            answer.isCorrect ? 1 : 0
-        ]);
         
-        await batchInsert('respostas', ['id', 'prova_id', 'aluno_cpf', 'questao_id', 'resposta', 'correta'], respostaData);
+        // Salvar as respostas
+        for (const answer of answers) {
+            await db.run(
+                `INSERT INTO respostas (id, prova_id, aluno_cpf, questao_id, resposta, correta) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [uuidv4(), examId, studentCpf, answer.questionId, answer.answer, answer.isCorrect ? 1 : 0]
+            );
+        }
         
         // Calcular nota
         const rows = await db.all(
@@ -851,7 +882,7 @@ app.post('/api/exams/:examId/submit', (req, res) => {
         
         const total = rows.length;
         const corretas = rows.filter(row => row.correta === 1).length;
-        const nota = (corretas / total * 10).toFixed(2);
+        const nota = total > 0 ? (corretas / total * 10).toFixed(2) : 0;
         
         // Salvar nota
         await db.run(
@@ -864,6 +895,7 @@ app.post('/api/exams/:examId/submit', (req, res) => {
             message: 'Prova submetida com sucesso!',
             nota: nota
         });
+        
     } catch (err) {
         console.error('Erro ao salvar respostas:', err);
         res.status(500).json({ error: 'Erro interno do servidor' });
@@ -875,7 +907,16 @@ app.post('/api/usuarios/login', async (req, res) => {
     const { cpf, senha, tipo, turma } = req.body;
     
     try {
-        const row = await db.get("SELECT * FROM usuarios WHERE cpf = ? AND tipo = ?", [cpf, tipo]);
+        // Buscar usuário no arquivo JSON
+        const usuariosPath = path.join(__dirname, 'usuario.json');
+        let usuarios = [];
+        
+        if (fs.existsSync(usuariosPath)) {
+            const data = fs.readFileSync(usuariosPath, 'utf8');
+            usuarios = JSON.parse(data);
+        }
+        
+        const row = usuarios.find(u => u.cpf === cpf && u.tipo === tipo);
         
         if (!row) {
             return res.json({ success: false, message: 'Usuário não encontrado' });
@@ -908,8 +949,17 @@ app.post('/api/usuarios/cadastrar', async (req, res) => {
     const { nome, cpf, senha, tipo, turma } = req.body;
     
     try {
+        // Ler usuários existentes do arquivo
+        const usuariosPath = path.join(__dirname, 'usuario.json');
+        let usuarios = [];
+        
+        if (fs.existsSync(usuariosPath)) {
+            const data = fs.readFileSync(usuariosPath, 'utf8');
+            usuarios = JSON.parse(data);
+        }
+        
         // Verificar se usuário já existe
-        const row = await db.get("SELECT * FROM usuarios WHERE cpf = ?", [cpf]);
+        const row = usuarios.find(u => u.cpf === cpf);
         
         if (row) {
             return res.json({ success: false, message: 'CPF já cadastrado' });
@@ -917,10 +967,19 @@ app.post('/api/usuarios/cadastrar', async (req, res) => {
         
         // Criar novo usuário
         const id = require('crypto').randomBytes(16).toString('hex');
-        db.run(
-            "INSERT INTO usuarios (id, nome, cpf, senha, tipo, turma) VALUES (?, ?, ?, ?, ?, ?)",
-            [id, nome, cpf, senha, tipo, turma]
-        );
+        const novoUsuario = {
+            id,
+            nome,
+            cpf,
+            senha,
+            tipo,
+            turma,
+            dataCadastro: new Date().toISOString()
+        };
+        
+        // Adicionar ao array e salvar no arquivo
+        usuarios.push(novoUsuario);
+        fs.writeFileSync(usuariosPath, JSON.stringify(usuarios, null, 2));
         
         res.json({ 
             success: true, 
@@ -940,36 +999,52 @@ app.get(['/', '/login', '/login/', '/login.html', '/aluno/login', '/aluno/login.
 });
 
 // Rotas do Aluno
-app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], (req, res) => {
-    console.log('[ROTA] Servindo página do aluno');
+app.get(['/aluno', '/aluno/dashboard', '/aluno/dashboard.html', '/aluno/acesso', '/aluno/acesso/'], checkAuth, (req, res) => {
+    if (req.user.tipo !== 'aluno') {
+        return res.redirect('/login/?error=Acesso restrito a alunos');
+    }
+    console.log('[ROTA] Servindo página do aluno para:', req.user.nome);
     res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
 });
 
-app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], (req, res) => {
-    console.log('[ROTA] Servindo página de provas do aluno');
+app.get(['/aluno/acesso/provas', '/aluno/acesso/provas.html', '/provas', '/provas.html'], checkAuth, (req, res) => {
+    if (req.user.tipo !== 'aluno') {
+        return res.redirect('/login/?error=Acesso restrito a alunos');
+    }
+    console.log('[ROTA] Servindo página de provas do aluno para:', req.user.nome);
     res.sendFile(path.join(__dirname, '../frontend/aluno/acesso/provas.html'));
 });
 
 // ===== ROTAS DO PROFESSOR (PROTEGIDAS) =====
-// Todas as rotas do professor agora estão protegidas com requireProfessorAuth
-app.get(['/professor', '/professor.html', '/professor/dashboard', '/professor/dashboard.html'], requireProfessorAuth, (req, res) => {
-    console.log('[ROTA] Servindo página do professor');
-    console.log('[ROTA] Caminho do arquivo:', path.join(__dirname, '../frontend/professor/professor.html'));
+// Todas as rotas do professor agora estão protegidas com checkAuth
+app.get(['/professor', '/professor.html', '/professor/dashboard', '/professor/dashboard.html'], checkAuth, (req, res) => {
+    // Verificar se o usuário é professor
+    if (req.user.tipo !== 'professor') {
+        return res.redirect('/login/?error=Acesso restrito a professores');
+    }
+    console.log('[ROTA] Servindo página do professor para:', req.user.nome);
     res.sendFile(path.join(__dirname, '../frontend/professor/professor.html'));
 });
 
-app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html', '/criarprova.html'], requireProfessorAuth, (req, res) => {
-    console.log('[ROTA] Servindo página de criação de provas');
+// Adicione checkAuth para todas as rotas protegidas
+app.get(['/professor/criar', '/professor/criarprova', '/professor/criarprova.html', '/criarprova.html'], checkAuth, (req, res) => {
+    if (req.user.tipo !== 'professor') {
+        return res.redirect('/login/?error=Acesso restrito a professores');
+    }
     res.sendFile(path.join(__dirname, '../frontend/professor/criar/criarprova.html'));
 });
 
-app.get(['/professor/gerenciar', '/professor/gerenciar.html'], requireProfessorAuth, (req, res) => {
-    console.log('[ROTA] Servindo página de gerenciamento de provas');
+app.get(['/professor/gerenciar', '/professor/gerenciar.html'], checkAuth, (req, res) => {
+    if (req.user.tipo !== 'professor') {
+        return res.redirect('/login/?error=Acesso restrito a professores');
+    }
     res.sendFile(path.join(__dirname, '../frontend/professor/gerenciar/gerenciar.html'));
 });
 
-app.get(['/professor/resultados', '/professor/resultados.html'], requireProfessorAuth, (req, res) => {
-    console.log('[ROTA] Servindo página de resultados');
+app.get(['/professor/resultados', '/professor/resultados.html'], checkAuth, (req, res) => {
+    if (req.user.tipo !== 'professor') {
+        return res.redirect('/login/?error=Acesso restrito a professores');
+    }
     res.sendFile(path.join(__dirname, '../frontend/professor/resultados/resultados.html'));
 });
 
@@ -1106,9 +1181,10 @@ initializeDatabase().then(() => {
         console.log('✅ Rota /api/auth/login disponível');
         console.log('✅ Rota /api/debug/session disponível para diagnóstico');
         console.log('⚡ Modo otimizado ativado - Processamento em lote e fila assíncrona');
-        console.log('🔑 USUÁRIOS DE TESTE:');
-        console.log('   Professor: CPF=12345678901, Senha=senha123');
-        console.log('   Aluno: CPF=10987654321, Senha=senha123');
+        console.log('🔑 Usuários agora são armazenados no arquivo usuario.json');
+        console.log('📝 Exemplo de usuário para teste:');
+        console.log('   Professor: CPF=12345678901, Senha=senha123, Tipo=professor');
+        console.log('   Aluno: CPF=10987654321, Senha=senha123, Tipo=aluno, Turma=3A');
     });
 }).catch(err => {
     console.error('Falha ao inicializar o banco de dados:', err);
