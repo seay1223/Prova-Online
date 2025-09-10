@@ -1,6 +1,4 @@
-// alternativeManager.js - Gerenciamento de alternativas
-
-export class AlternativeManager {
+class AlternativeManager {
     constructor() {
         this.alternatives = [];
         this.nextId = 1;
@@ -98,4 +96,4 @@ export class AlternativeManager {
 }
 
 // Instância global
-export const alternativeManager = new AlternativeManager();
+const alternativeManager = new AlternativeManager();

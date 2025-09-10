@@ -271,7 +271,7 @@ const processingQueue = {
 };
 
 // ===== FUNÇÕES UTILITÁRIAS =====
-async function batchInsert(table, columns, data, batchSize = 50) {
+function batchInsert(table, columns, data, batchSize = 50) {
     return new Promise((resolve, reject) => {
         const batches = [];
         for (let i = 0; i < data.length; i += batchSize) {
@@ -369,8 +369,9 @@ app.get('/api/user/data', async (req, res) => {
     }
 });
 
-// API - Cadastro de usuários (CORRIGIDA)
-app.post('/api/cadastro', async (req, res) => {
+// API - Cadastro de usuários
+// API - Cadastro de usuários
+app.post('/api/cadastro', (req, res) => {
     const { nome, cpf, senha, tipo, turma } = req.body;
     
     console.log('=== TENTATIVA DE CADASTRO ===');
@@ -609,46 +610,53 @@ app.get('/api/exams/:id', async (req, res) => {
 });
 
 // API - Geração de link único (ATUALIZADA PARA CPF)
-app.post('/api/gerar-link-unico', async (req, res) => {
-    try {
-        const { prova_id, aluno_cpf } = req.body;
-        const row = await db.get(
-            `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_cpf = ?`, 
-            [prova_id, aluno_cpf]
-        );
-        
-        if (row) {
-            return res.json({
-                link_unico: row.link_unico,
-                message: 'Link único já existente'
-            });
+app.post('/api/gerar-link-unico', (req, res) => {
+    const { prova_id, aluno_cpf } = req.body;
+    db.get(
+        `SELECT * FROM links_unicos WHERE prova_id = ? AND aluno_cpf = ?`, [prova_id, aluno_cpf],
+        (err, row) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            if (row) {
+                return res.json({
+                    link_unico: row.link_unico,
+                    message: 'Link único já existente'
+                });
+            } else {
+                const linkUnico = uuidv4();
+                db.run(
+                    `INSERT INTO links_unicos (prova_id, aluno_cpf, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, [prova_id, aluno_cpf, linkUnico],
+                    function(err) {
+                        if (err) {
+                            return res.status(500).json({ error: err.message });
+                        }
+                        res.json({
+                            link_unico: linkUnico,
+                            message: 'Link único gerado com sucesso!'
+                        });
+                    }
+                );
+            }
         }
-        
-        const linkUnico = uuidv4();
-        await db.run(
-            `INSERT INTO links_unicos (prova_id, aluno_cpf, link_unico, data_criacao) VALUES (?, ?, ?, datetime('now'))`, 
-            [prova_id, aluno_cpf, linkUnico]
-        );
-        
-        res.json({
-            link_unico: linkUnico,
-            message: 'Link único gerado com sucesso!'
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    );
 });
 
 // API - CRUD Provas
-app.post('/api/provas', async(req, res) => {
+app.post('/api/provas', requireProfessorAuth, async(req, res) => {
     const { titulo, disciplina, data_limite, tempo_limite, descricao, questões, alunos } = req.body;
     const provaId = uuidv4();
     
     try {
-        await db.run(
-            `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-            [provaId, titulo, disciplina, 'professor_cpf_aqui', data_limite, tempo_limite, descricao]
-        );
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, titulo, disciplina, 'professor_cpf_aqui', data_limite, tempo_limite, descricao],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
         
         res.json({
             id: provaId,
@@ -728,7 +736,7 @@ app.post('/api/provas', async(req, res) => {
 });
 
 // API - Salvar prova (compatibilidade)
-app.post('/api/salvar-prova', async (req, res) => {
+app.post('/api/salvar-prova', (req, res) => {
     const { title, description, duration, exam_date, questions } = req.body;
     console.log('Recebendo dados da prova:', { title, description, duration, exam_date, questions });
     
@@ -746,51 +754,67 @@ app.post('/api/salvar-prova', async (req, res) => {
         
         await db.run(
             `INSERT INTO provas (id, titulo, disciplina, professor_cpf, data_limite, tempo_limite, descricao) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-            [provaId, title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || '']
-        );
-        
-        if (questions && questions.length > 0) {
-            for (const [index, question] of questions.entries()) {
-                const questaoId = uuidv4();
-                await db.run(
-                    `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) 
-                     VALUES (?, ?, ?, ?, ?, ?)`, 
-                    [questaoId, provaId, question.type, question.text, question.value || 1.0, index]
-                );
+             VALUES (?, ?, ?, ?, ?, ?, ?)`, [provaId, title, 'Geral', 'professor_cpf_aqui', isoDate, duration, description || ''],
+            function(err) {
+                if (err) {
+                    console.error('Erro ao inserir prova:', err);
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Erro ao salvar prova: ' + err.message
+                    });
+                }
                 
-                if ((question.type === 'multipla_escolha' || question.type === 'verdadeiro_falso') &&
-                    question.alternatives) {
-                    for (const [altIndex, alternative] of question.alternatives.entries()) {
-                        const isCorrect = question.type === 'verdadeiro_falso' ?
-                            alternative === question.correctAnswer :
-                            altIndex === question.correctAnswer;
-                        await db.run(
-                            `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) 
-                             VALUES (?, ?, ?, ?, ?)`, 
-                            [uuidv4(), questaoId, alternative, isCorrect ? 1 : 0, altIndex]
+                if (questions && questions.length > 0) {
+                    let questionsProcessed = 0;
+                    questions.forEach((question, index) => {
+                        const questaoId = uuidv4();
+                        db.run(
+                            `INSERT INTO questoes (id, prova_id, tipo, enunciado, valor, ordem) 
+                             VALUES (?, ?, ?, ?, ?, ?)`, [questaoId, provaId, question.type, question.text, question.value || 1.0, index],
+                            function(err) {
+                                if (err) {
+                                    console.error('Erro ao inserir questão:', err);
+                                    return;
+                                }
+                                
+                                if ((question.type === 'multipla_escolha' || question.type === 'verdadeiro_falso') &&
+                                    question.alternatives) {
+                                    question.alternatives.forEach((alternative, altIndex) => {
+                                        const isCorrect = question.type === 'verdadeiro_falso' ?
+                                            alternative === question.correctAnswer :
+                                            altIndex === question.correctAnswer;
+                                        db.run(
+                                            `INSERT INTO alternativas (id, questao_id, texto, correta, ordem) 
+                                             VALUES (?, ?, ?, ?, ?)`, [uuidv4(), questaoId, alternative, isCorrect ? 1 : 0, altIndex]
+                                        );
+                                    });
+                                }
+                                
+                                questionsProcessed++;
+                                if (questionsProcessed === questions.length) {
+                                    res.json({
+                                        success: true,
+                                        message: 'Prova salva com sucesso!',
+                                        examId: provaId
+                                    });
+                                }
+                            }
                         );
-                    }
+                    });
+                } else {
+                    res.json({
+                        success: true,
+                        message: 'Prova salva com sucesso!',
+                        examId: provaId
+                    });
                 }
             }
-        }
-        
-        res.json({
-            success: true,
-            message: 'Prova salva com sucesso!',
-            examId: provaId
-        });
-    } catch (err) {
-        console.error('Erro ao inserir prova:', err);
-        res.status(500).json({
-            success: false,
-            message: 'Erro ao salvar prova: ' + err.message
-        });
-    }
+        );
+    });
 });
 
 // API - Submeter respostas da prova
-app.post('/api/exams/:examId/submit', async (req, res) => {
+app.post('/api/exams/:examId/submit', (req, res) => {
     const examId = req.params.id;
     const { studentCpf, answers } = req.body;
     
@@ -893,7 +917,7 @@ app.post('/api/usuarios/cadastrar', async (req, res) => {
         
         // Criar novo usuário
         const id = require('crypto').randomBytes(16).toString('hex');
-        await db.run(
+        db.run(
             "INSERT INTO usuarios (id, nome, cpf, senha, tipo, turma) VALUES (?, ?, ?, ?, ?, ?)",
             [id, nome, cpf, senha, tipo, turma]
         );

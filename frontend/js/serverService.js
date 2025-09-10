@@ -3,12 +3,31 @@ const API_BASE_URL = 'http://localhost:3000/api';
 
 class ServerService {
     constructor() {
-        this.token = localStorage.getItem('authToken');
+        // Verificar se há sessão ativa no localStorage
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+            try {
+                this.userData = JSON.parse(userData);
+            } catch (e) {
+                console.error('Erro ao parsear userData:', e);
+                localStorage.removeItem('userData');
+            }
+        }
     }
 
-    setAuthToken(token) {
-        this.token = token;
-        localStorage.setItem('authToken', token);
+    // Método para verificar autenticação
+    isAuthenticated() {
+        return !!this.userData;
+    }
+
+    // Método para verificar se é professor
+    isProfessor() {
+        return this.userData && this.userData.tipo === 'professor';
+    }
+
+    // Método para verificar se é aluno
+    isStudent() {
+        return this.userData && this.userData.tipo === 'aluno';
     }
 
     async request(endpoint, options = {}) {
@@ -17,9 +36,9 @@ class ServerService {
         const config = {
             headers: {
                 'Content-Type': 'application/json',
-                ...(this.token && { 'Authorization': `Bearer ${this.token}` }),
                 ...options.headers
             },
+            credentials: 'include', // Importante para cookies de sessão
             ...options
         };
 
@@ -27,15 +46,20 @@ class ServerService {
             const response = await fetch(url, config);
             
             if (response.status === 401) {
-                // Token expirado ou inválido
-                localStorage.removeItem('authToken');
+                // Sessão expirada
                 localStorage.removeItem('userData');
-                window.location.href = '/login';
+                window.location.href = '/login?error=Sessão expirada';
                 throw new Error('Sessão expirada');
             }
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
+                const errorText = await response.text();
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch {
+                    errorData = { message: errorText || `Erro HTTP! status: ${response.status}` };
+                }
                 throw new Error(errorData.message || `Erro HTTP! status: ${response.status}`);
             }
 
@@ -46,23 +70,44 @@ class ServerService {
         }
     }
 
-    // Operações de autenticação
-    async login(email, password, tipo) {
+    // Operações de autenticação (COMPATÍVEL COM SEU SERVIDOR)
+    async login(cpf, senha, tipo, turma) {
         try {
             const response = await fetch(`${API_BASE_URL}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ email, senha: password, tipo })
+                credentials: 'include',
+                body: JSON.stringify({ cpf, senha, tipo, turma })
             });
             
-            const data = await response.json();
+            // Primeiro tentamos ler como texto para debug
+            const responseText = await response.text();
+            console.log('Resposta do login:', responseText);
             
-            if (data.success && data.token) {
-                this.setAuthToken(data.token);
-                // Salvar dados do usuário
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                console.error('Erro ao parsear resposta JSON:', e);
+                return { 
+                    success: false, 
+                    message: 'Resposta inválida do servidor' 
+                };
+            }
+            
+            if (data.success && data.user) {
+                // Salvar dados do usuário no localStorage
+                this.userData = data.user;
                 localStorage.setItem('userData', JSON.stringify(data.user));
+                
+                // Redirecionar conforme o tipo de usuário
+                if (data.redirectUrl) {
+                    setTimeout(() => {
+                        window.location.href = data.redirectUrl;
+                    }, 1000);
+                }
             }
             
             return data;
@@ -81,22 +126,32 @@ class ServerService {
         } catch (error) {
             console.error('Logout error:', error);
         } finally {
-            localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
-            this.token = null;
+            this.userData = null;
+            window.location.href = '/login';
         }
     }
 
-    // Operações de provas
+    async checkAuth() {
+        try {
+            const response = await this.request('/auth/check');
+            if (response.authenticated && response.user) {
+                this.userData = response.user;
+                localStorage.setItem('userData', JSON.stringify(response.user));
+            }
+            return response;
+        } catch (error) {
+            console.error('Auth check error:', error);
+            return { authenticated: false };
+        }
+    }
+
+    // Operações de provas (COMPATÍVEL COM SEU SERVIDOR)
     async saveExam(examData) {
         try {
-            return await this.request('/exams', {
+            return await this.request('/salvar-prova', {
                 method: 'POST',
-                body: JSON.stringify({
-                    ...examData,
-                    published: true,
-                    createdAt: new Date().toISOString()
-                })
+                body: examData
             });
         } catch (error) {
             console.error('Save exam error:', error);
@@ -107,9 +162,24 @@ class ServerService {
         }
     }
 
+    async createExam(examData) {
+        try {
+            return await this.request('/provas', {
+                method: 'POST',
+                body: examData
+            });
+        } catch (error) {
+            console.error('Create exam error:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Erro ao criar prova' 
+            };
+        }
+    }
+
     async getAvailableExams() {
         try {
-            return await this.request('/exams/available');
+            return await this.request('/exams');
         } catch (error) {
             console.error('Get available exams error:', error);
             return [];
@@ -125,10 +195,14 @@ class ServerService {
         }
     }
 
-    // Verificar se o aluno já realizou a prova (CORREÇÃO)
-    async checkExamAttempt(examId, studentId) {
+    // Verificar se o aluno já realizou a prova (ATUALIZADO)
+    async checkExamAttempt(examId) {
         try {
-            const response = await this.request(`/exams/${examId}/attempt/${studentId}`);
+            if (!this.userData || !this.userData.cpf) {
+                return { attempted: false, error: 'Usuário não autenticado' };
+            }
+            
+            const response = await this.request(`/exams/${examId}/attempt/${this.userData.cpf}`);
             return response;
         } catch (error) {
             console.error('Check exam attempt error:', error);
@@ -136,12 +210,22 @@ class ServerService {
         }
     }
 
-    // Enviar respostas da prova
+    // Enviar respostas da prova (ATUALIZADO)
     async submitExamAnswers(examId, answers) {
         try {
+            if (!this.userData || !this.userData.cpf) {
+                return { 
+                    success: false, 
+                    message: 'Usuário não autenticado' 
+                };
+            }
+            
             return await this.request(`/exams/${examId}/submit`, {
                 method: 'POST',
-                body: JSON.stringify({ answers })
+                body: {
+                    studentCpf: this.userData.cpf,
+                    answers: answers
+                }
             });
         } catch (error) {
             console.error('Submit exam error:', error);
@@ -151,7 +235,57 @@ class ServerService {
             };
         }
     }
+
+    // Gerar link único para aluno (PARA PROFESSORES)
+    async generateUniqueLink(provaId, alunoCpf) {
+        try {
+            return await this.request('/gerar-link-unico', {
+                method: 'POST',
+                body: { prova_id: provaId, aluno_cpf: alunoCpf }
+            });
+        } catch (error) {
+            console.error('Generate unique link error:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Erro ao gerar link único' 
+            };
+        }
+    }
+
+    // Cadastro de usuários
+    async registerUser(userData) {
+        try {
+            return await this.request('/cadastro', {
+                method: 'POST',
+                body: userData
+            });
+        } catch (error) {
+            console.error('Register user error:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Erro ao cadastrar usuário' 
+            };
+        }
+    }
 }
 
-// Instância singleton
+// Instância global
 window.serverService = new ServerService();
+
+// Verificar autenticação automaticamente ao carregar
+document.addEventListener('DOMContentLoaded', function() {
+    serverService.checkAuth().then(authStatus => {
+        console.log('Status de autenticação:', authStatus);
+        
+        // Se não está autenticado e não está na página de login, redirecionar
+        if (!authStatus.authenticated && !window.location.pathname.includes('login')) {
+            window.location.href = '/login';
+        }
+        
+        // Se está autenticado e está na página de login, redirecionar para dashboard
+        if (authStatus.authenticated && window.location.pathname.includes('login')) {
+            const redirectUrl = authStatus.user.tipo === 'professor' ? '/professor' : '/aluno';
+            window.location.href = redirectUrl;
+        }
+    });
+});
