@@ -247,28 +247,52 @@ function requireProfessorAuth(req, res, next) {
     }
 }
 
-// Middleware alternativo para verificar autenticação
+// Middleware simplificado e corrigido para verificar autenticação
 function checkAuth(req, res, next) {
-    console.log('[AUTH CHECK] Verificando autenticação...');
+    console.log('[AUTH] Verificando autenticação para:', req.path);
+    
+    // Lista de rotas públicas que não requerem autenticação
+    const publicRoutes = [
+        '/',
+        '/login',
+        '/login/',
+        '/cadastro',
+        '/cadastro/',
+        '/contato',
+        '/politica',
+        '/termos',
+        '/api/auth/login',
+        '/api/cadastro',
+        '/api/test',
+        '/health',
+        '/api/status'
+    ];
+    
+    // Se é uma rota pública, não verificar autenticação
+    if (publicRoutes.includes(req.path) || req.path.startsWith('/public/')) {
+        console.log('[AUTH] Rota pública, acesso permitido');
+        return next();
+    }
     
     // Verificar se há usuário na sessão
     if (req.session && req.session.user) {
-        console.log('[AUTH CHECK] Usuário encontrado na sessão:', req.session.user);
+        console.log('[AUTH] Usuário autenticado:', req.session.user.nome);
         req.user = req.session.user;
         return next();
     }
     
-    // Se não houver sessão, verificar se é uma requisição API
-    if (req.xhr || req.path.startsWith('/api/')) {
+    console.log('[AUTH] Usuário não autenticado para rota:', req.path);
+    
+    // Para APIs, retornar JSON
+    if (req.path.startsWith('/api/')) {
         return res.status(401).json({ 
             error: 'Não autenticado',
             redirect: '/login/'
         });
     }
     
-    // Para rotas de páginas, redirecionar para login
-    console.log('[AUTH CHECK] Nenhuma sessão encontrada, redirecionando...');
-    res.redirect('/login/?error=Sessão expirada');
+    // Para páginas, redirecionar para login
+    res.redirect('/login/?error=Sessão expirada ou não autenticado');
 }
 
 // ===== SISTEMA DE FILA =====
@@ -486,81 +510,105 @@ app.post('/api/cadastro', async (req, res) => {
     }
 });
 
-// API - Autenticação (USANDO ARQUIVO usuario.json) - MODIFICADA
+// API - Autenticação (USANDO ARQUIVO usuario.json) - COM MELHOR TRATAMENTO DE ERRO
 app.post('/api/auth/login', async (req, res) => {
-    const { cpf, senha, tipo, turma } = req.body;
-    
-    console.log('=== TENTATIVA DE LOGIN COM ARQUIVO JSON ===');
-    console.log('CPF:', cpf);
-    console.log('Tipo:', tipo);
-    console.log('Turma:', turma);
+    console.log('=== TENTATIVA DE LOGIN RECEBIDA ===');
     
     try {
+        const { cpf, senha, tipo, turma } = req.body;
+        
+        console.log('Dados recebidos:', { cpf, tipo, turma });
+        
+        // Validar dados de entrada
+        if (!cpf || !senha || !tipo) {
+            console.log('Dados incompletos');
+            return res.status(400).json({
+                success: false,
+                message: 'Todos os campos são obrigatórios'
+            });
+        }
+
         // Ler usuários do arquivo JSON
         const usuariosPath = path.join(__dirname, 'usuario.json');
-        let usuarios = [];
         
-        if (fs.existsSync(usuariosPath)) {
-            const data = fs.readFileSync(usuariosPath, 'utf8');
-            usuarios = JSON.parse(data);
-            console.log('Usuários carregados do arquivo:', usuarios);
-        } else {
-            console.log('Arquivo usuario.json não encontrado, usando array vazio');
+        // Verificar se o arquivo existe
+        if (!fs.existsSync(usuariosPath)) {
+            console.log('Arquivo usuario.json não encontrado');
+            return res.status(500).json({
+                success: false,
+                message: 'Sistema de autenticação não configurado'
+            });
         }
+
+        // Ler e parsear o arquivo
+        const data = fs.readFileSync(usuariosPath, 'utf8');
+        console.log('Conteúdo do arquivo usuario.json:', data.substring(0, 200) + '...');
         
-        // Buscar usuário no array
+        let usuarios = [];
+        try {
+            usuarios = JSON.parse(data);
+            console.log('Número de usuários carregados:', usuarios.length);
+        } catch (parseError) {
+            console.error('Erro ao parsear usuario.json:', parseError);
+            return res.status(500).json({
+                success: false,
+                message: 'Erro no arquivo de usuários'
+            });
+        }
+
+        // Buscar usuário
         const usuario = usuarios.find(u => u.cpf === cpf && u.tipo === tipo);
         
-        if (usuario) {
-            if (usuario.senha === senha) {
-                if (tipo === 'aluno' && usuario.turma !== turma) {
-                    return res.status(401).json({
-                        success: false,
-                        message: `Turma incorreta. Sua turma é ${usuario.turma}.`
-                    });
-                }
-                
-                // SALVAR NA SESSÃO (remover senha por segurança)
-                const userSession = { ...usuario };
-                delete userSession.senha;
-                
-                req.session.user = userSession;
-                
-                // Forçar salvamento da sessão
-                req.session.save((err) => {
-                    if (err) {
-                        console.error('Erro ao salvar sessão:', err);
-                        return res.status(500).json({
-                            success: false,
-                            message: 'Erro interno'
-                        });
-                    }
-                    
-                    console.log('Sessão salva com sucesso:', req.session.user);
-                    
-                    res.json({
-                        success: true,
-                        message: 'Login realizado com sucesso!',
-                        user: userSession,
-                        redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor',
-                        sessionId: req.sessionID // Enviar session ID para debug
-                    });
-                });
-                
-            } else {
-                res.status(401).json({
-                    success: false,
-                    message: 'Senha incorreta'
-                });
-            }
-        } else {
-            res.status(401).json({
+        if (!usuario) {
+            console.log('Usuário não encontrado para CPF:', cpf, 'e tipo:', tipo);
+            return res.status(401).json({
                 success: false,
                 message: 'Usuário não encontrado'
             });
         }
+
+        console.log('Usuário encontrado:', usuario.nome);
+
+        // Verificar senha
+        if (usuario.senha !== senha) {
+            console.log('Senha incorreta para usuário:', usuario.nome);
+            return res.status(401).json({
+                success: false,
+                message: 'Senha incorreta'
+            });
+        }
+
+        // Verificar turma para alunos
+        if (tipo === 'aluno' && usuario.turma !== turma) {
+            console.log('Turma incorreta. Esperada:', usuario.turma, 'Recebida:', turma);
+            return res.status(401).json({
+                success: false,
+                message: `Turma incorreta. Sua turma é ${usuario.turma}.`
+            });
+        }
+
+        // Criar sessão (sem a senha)
+        const userSession = { 
+            id: usuario.id,
+            nome: usuario.nome,
+            cpf: usuario.cpf,
+            tipo: usuario.tipo,
+            turma: usuario.turma
+        };
+
+        req.session.user = userSession;
+        
+        console.log('Sessão criada com sucesso para:', userSession.nome);
+        
+        res.json({
+            success: true,
+            message: 'Login realizado com sucesso!',
+            user: userSession,
+            redirectUrl: tipo === 'aluno' ? '/aluno' : '/professor'
+        });
+
     } catch (error) {
-        console.error('Erro no login:', error);
+        console.error('ERRO CRÍTICO NO LOGIN:', error);
         res.status(500).json({
             success: false,
             message: 'Erro interno do servidor: ' + error.message
@@ -570,17 +618,24 @@ app.post('/api/auth/login', async (req, res) => {
 
 // API - Verificar sessão
 app.get('/api/auth/check', (req, res) => {
-    console.log('[AUTH CHECK] Verificando sessão:', req.session.user);
+    console.log('[AUTH CHECK] Verificando sessão para:', req.headers.referer);
+    console.log('[AUTH CHECK] Session ID:', req.sessionID);
+    console.log('[AUTH CHECK] Session data:', req.session);
+    
     if (req.session && req.session.user) {
+        console.log('[AUTH CHECK] Usuário autenticado:', req.session.user);
         res.json({ 
             authenticated: true, 
             user: req.session.user 
         });
     } else {
-        res.json({ authenticated: false });
+        console.log('[AUTH CHECK] Nenhum usuário autenticado');
+        res.json({ 
+            authenticated: false,
+            message: 'Sessão não encontrada'
+        });
     }
 });
-
 // API - Logout
 app.post('/api/auth/logout', (req, res) => {
     req.session.destroy((err) => {
@@ -1170,8 +1225,21 @@ app.use((err, req, res, next) => {
     });
 });
 
+// API - Verificar se usuário está logado
+app.get('/api/auth/status', (req, res) => {
+    if (req.session && req.session.user) {
+        res.json({
+            authenticated: true,
+            user: req.session.user
+        });
+    } else {
+        res.json({
+            authenticated: false
+        });
+    }
+});
+
 // ===== INICIALIZAÇÃO DO SERVIDOR =====
-// Inicializar o banco de dados e depois iniciar o servidor
 initializeDatabase().then(() => {
     app.listen(PORT, () => {
         console.log('🎓 PROVA-ONLINE rodando!');
