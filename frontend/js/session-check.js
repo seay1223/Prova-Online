@@ -4,18 +4,35 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Não verificar sessão nas páginas públicas
     const publicPages = ['/login/', '/cadastro/', '/contato/', '/politica/', '/termos/'];
-    if (publicPages.includes(window.location.pathname)) {
+    
+    // Verificar se estamos em uma página pública
+    const isPublicPage = publicPages.some(page => 
+        window.location.pathname.startsWith(page.replace(/\/$/, ''))
+    );
+    
+    if (isPublicPage) {
         console.log('Página pública, sessão não verificada');
         return;
     }
     
     console.log('Verificando autenticação...');
     
+    // Adicionar timeout para a requisição
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
+    
     fetch('/api/auth/check', {
-        credentials: 'include' // IMPORTANTE: inclui cookies na requisição
+        credentials: 'include', // IMPORTANTE: inclui cookies na requisição
+        signal: controller.signal
     })
     .then(response => {
+        clearTimeout(timeoutId);
         console.log('Status da verificação:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         return response.json();
     })
     .then(data => {
@@ -52,10 +69,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     })
     .catch(error => {
+        clearTimeout(timeoutId);
         console.error('❌ Erro ao verificar sessão:', error);
+        
         // Só redirecionar se não estiver em página pública
-        if (!publicPages.includes(window.location.pathname)) {
-            window.location.href = '/login/?error=Erro de conexão com o servidor';
+        if (!isPublicPage && window.location.pathname !== '/login/') {
+            if (error.name === 'AbortError') {
+                window.location.href = '/login/?error=Tempo de verificação excedido';
+            } else {
+                window.location.href = '/login/?error=Erro de conexão com o servidor';
+            }
         }
     });
     
@@ -80,6 +103,11 @@ document.addEventListener('DOMContentLoaded', function() {
             professorElements.forEach(el => el.style.display = 'none');
             alunoElements.forEach(el => el.style.display = 'block');
         }
+        
+        // Disparar evento personalizado para notificar outros scripts
+        document.dispatchEvent(new CustomEvent('userAuthenticated', {
+            detail: { user }
+        }));
     }
 });
 
@@ -91,7 +119,12 @@ function debugSession() {
     console.log('SessionStorage:', sessionStorage);
     
     fetch('/api/debug/session', { credentials: 'include' })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => console.log('Debug da sessão:', data))
         .catch(error => console.error('Erro no debug:', error));
 }

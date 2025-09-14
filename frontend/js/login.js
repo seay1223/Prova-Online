@@ -1,6 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== SISTEMA DE LOGIN INICIADO ===');
     
+    // Verificar se já está logado (com timeout para evitar loop)
+    setTimeout(checkAuthenticationStatus, 100);
+    
     const loginForm = document.getElementById('loginForm');
     const tipoAluno = document.getElementById('tipoAluno');
     const tipoProfessor = document.getElementById('tipoProfessor');
@@ -77,13 +80,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 turma = document.getElementById('turmaProfessor') ? document.getElementById('turmaProfessor').value : null;
             }
             
-            // Log para depuração
-            console.log('=== DADOS DO FORMULÁRIO ===');
-            console.log('CPF:', cpf);
-            console.log('Senha:', password);
-            console.log('Tipo:', tipo);
-            console.log('Turma:', turma);
-            
             // Validações
             if (!cpf || !password || !tipo) {
                 showError('Por favor, preencha todos os campos e selecione o tipo de usuário.');
@@ -121,17 +117,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(loginData),
-                credentials: 'same-origin' // Importante para cookies de sessão
+                credentials: 'include' // IMPORTANTE: para enviar cookies
             })
             .then(async response => {
-                console.log('Status da resposta:', response.status);
-                
-                // Tentar obter o corpo da resposta como texto primeiro
                 const responseText = await response.text();
-                console.log('Resposta do servidor:', responseText);
                 
                 if (!response.ok) {
-                    // Tentar analisar como JSON, se falhar, usar o texto bruto
                     try {
                         const errorData = JSON.parse(responseText);
                         throw new Error(errorData.message || 'Erro na autenticação');
@@ -140,25 +131,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
                 
-                // Se chegou aqui, a resposta foi bem-sucedida
                 try {
-                    return JSON.parse(responseText);
+                    const data = JSON.parse(responseText);
+                    
+                    if (data.success) {
+                        showSuccess('Login realizado com sucesso! Redirecionando...');
+                        
+                        // Redireciona diretamente sem verificar novamente
+                        setTimeout(() => {
+                            // Usar replace para evitar que o usuário volte para o login
+                            window.location.replace(data.redirectUrl || '/dashboard.html');
+                        }, 1000);
+                    } else {
+                        showError(data.message || 'CPF, senha ou tipo de usuário incorretos.');
+                    }
                 } catch (e) {
                     throw new Error('Resposta inválida do servidor');
-                }
-            })
-            .then(data => {
-                console.log('Resposta da API:', data);
-                
-                if (data.success) {
-                    showSuccess('Login realizado com sucesso! Redirecionando...');
-                    
-                    // Redireciona para a página correta após um breve delay
-                    setTimeout(() => {
-                        window.location.href = data.redirectUrl;
-                    }, 1500);
-                } else {
-                    showError(data.message || 'CPF, senha ou tipo de usuário incorretos.');
                 }
             })
             .catch(error => {
@@ -244,6 +232,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 msg.parentNode.removeChild(msg);
             }
         });
+    }
+    
+    // Função para verificar autenticação
+    function checkAuthenticationStatus() {
+        // Só verifica se não estamos na página de login por acidente
+        if (window.location.pathname.includes('login.html') || 
+            window.location.pathname.includes('login')) {
+            
+            fetch('/api/auth/check', {
+                method: 'GET',
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Não autenticado');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.isAuthenticated && data.redirectUrl) {
+                    console.log('Usuário já autenticado, redirecionando...');
+                    // Usar replace para evitar histórico de navegação
+                    window.location.replace(data.redirectUrl);
+                }
+            })
+            .catch(error => {
+                console.log('Usuário não autenticado:', error);
+            });
+        }
     }
     
     // Adicionar link para cadastro se não existir
