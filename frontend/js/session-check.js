@@ -1,89 +1,181 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== VERIFICAÇÃO DE SESSÃO INICIADA ===');
-    console.log('Página atual:', window.location.pathname);
-    
-    // Não verificar sessão nas páginas públicas
-    const publicPages = ['/login/', '/cadastro/', '/contato/', '/politica/', '/termos/'];
-    
-    // Verificar se estamos em uma página pública
-    const isPublicPage = publicPages.some(page => 
-        window.location.pathname.startsWith(page.replace(/\/$/, ''))
-    );
-    
-    if (isPublicPage) {
-        console.log('Página pública, sessão não verificada');
+
+    const noCheckPages = [
+        '/login/',
+        '/login',
+        '/cadastro/',
+        '/cadastro',
+        '/contato/',
+        '/politica/',
+        '/termos/',
+        '/',
+        ''
+    ];
+
+    const currentPath = window.location.pathname;
+
+    if (noCheckPages.includes(currentPath) || noCheckPages.includes(currentPath + '/')) {
+        console.log('⏭️ Página excluída da verificação:', currentPath);
         return;
     }
-    
-    console.log('Verificando autenticação...');
-    
-    // Adicionar timeout para a requisição
+
+    const publicPages = [
+        '/login/',
+        '/cadastro/',
+        '/contato/',
+        '/politica/',
+        '/termos/',
+        '/',
+        ''
+    ];
+
+    const isPublicPage = publicPages.some(page => 
+        window.location.pathname === page || 
+        window.location.pathname.startsWith(page.replace(/\/$/, ''))
+    );
+
+    if (isPublicPage) {
+        console.log('📄 Página pública, sessão não verificada');
+        return;
+    }
+
+    console.log('🔐 Verificando autenticação para página protegida...');
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
-    
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.warn('⏰ Timeout: Verificação de sessão demorou mais de 5 segundos.');
+    }, 5000);
+
     fetch('/api/auth/check', {
-        credentials: 'include', // IMPORTANTE: inclui cookies na requisição
-        signal: controller.signal
+        method: 'GET',
+        credentials: 'include',
+        signal: controller.signal,
+        headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache'
+        }
     })
     .then(response => {
         clearTimeout(timeoutId);
-        console.log('Status da verificação:', response.status);
-        
+        console.log('📡 Resposta recebida da API /api/auth/check:', response.status);
+
         if (!response.ok) {
+            console.warn('⚠️ API retornou erro:', response.status);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         return response.json();
     })
     .then(data => {
-        console.log('Resposta da verificação:', data);
-        
-        if (data.authenticated) {
-            console.log('✅ Usuário autenticado:', data.user);
-            
-            // Verificar se o tipo de usuário corresponde à página
-            const isProfessorPage = window.location.pathname.startsWith('/professor');
-            const isAlunoPage = window.location.pathname.startsWith('/aluno');
-            
-            if (isProfessorPage && data.user.tipo !== 'professor') {
-                console.log('❌ Acesso negado: professor requerido');
-                window.location.href = '/login/?error=Acesso restrito a professores';
-                return;
-            }
-            
-            if (isAlunoPage && data.user.tipo !== 'aluno') {
-                console.log('❌ Acesso negado: aluno requerido');
-                window.location.href = '/login/?error=Acesso restrito a alunos';
-                return;
-            }
-            
-            // Atualizar interface com dados do usuário
-            updateUserInterface(data.user);
-            
+        console.log('✅ Dados da API /api/auth/check:', data);
+
+        if (data.isAuthenticated && data.user) {
+            handleAuthenticated(data.user);
         } else {
-            console.log('❌ Usuário não autenticado');
-            // Não redirecionar se já estiver na página de login
-            if (window.location.pathname !== '/login/') {
-                window.location.href = '/login/?error=Sessão expirada ou não autenticado';
-            }
+            handleNotAuthenticated();
         }
     })
     .catch(error => {
         clearTimeout(timeoutId);
-        console.error('❌ Erro ao verificar sessão:', error);
-        
-        // Só redirecionar se não estiver em página pública
-        if (!isPublicPage && window.location.pathname !== '/login/') {
-            if (error.name === 'AbortError') {
-                window.location.href = '/login/?error=Tempo de verificação excedido';
-            } else {
-                window.location.href = '/login/?error=Erro de conexão com o servidor';
-            }
+        console.error('❌ Erro CRÍTICO ao verificar sessão:', error);
+
+        if (error.name === 'AbortError') {
+            console.warn('⚠️ Verificação de sessão foi abortada (timeout).');
+            handleNotAuthenticated();
+        } else {
+            console.error('Erro na verificação de sessão:', error);
+            handleNotAuthenticated();
         }
     });
-    
+
+    function handleAuthenticated(user) {
+        console.log('✅ Usuário autenticado via API:', user.nome);
+
+        const currentPath = window.location.pathname;
+
+        if (currentPath.includes('/login')) {
+            console.log('📋 Usuário autenticado na página de login, redirecionando...');
+            const redirectUrl = user.tipo === 'professor' ? '/professor/professor.html' : '/aluno/aluno.html';
+            
+            if (currentPath !== redirectUrl) {
+                window.location.href = redirectUrl;
+            } else {
+                console.log('⚠️ Já está na página destino, evitando redirecionamento');
+            }
+            return;
+        }
+
+        const isProfessorPage = currentPath.includes('/professor');
+        const isAlunoPage = currentPath.includes('/aluno');
+
+        if (isProfessorPage && user.tipo !== 'professor') {
+            showAccessDenied('Acesso restrito a professores');
+            return;
+        }
+
+        if (isAlunoPage && user.tipo !== 'aluno') {
+            showAccessDenied('Acesso restrito a alunos');
+            return;
+        }
+
+        updateUserInterface(user);
+    }
+
+    function handleNotAuthenticated() {
+        console.log('❌ Usuário NÃO autenticado via API.');
+
+        if (window.location.pathname.includes('/login')) {
+            console.log('ℹ️ Já está na página de login, não redirecionar.');
+            return;
+        }
+
+        // **LÓGICA DE TOLERÂNCIA: Verificar se o login foi bem-sucedido recentemente**
+        const lastLogin = sessionStorage.getItem('lastLogin');
+        const now = Date.now();
+        const FIVE_MINUTES = 5 * 60 * 1000;
+
+        if (lastLogin && (now - parseInt(lastLogin)) < FIVE_MINUTES) {
+            console.log('✅ Login recente detectado (dentro de 5 min), ignorando falha de verificação de sessão. Permitindo acesso.');
+            return;
+        }
+
+        console.log('🔁 Redirecionando para login devido à falha de autenticação.');
+        const redirectUrl = '/login/?error=Sessão expirada. Faça login novamente.';
+        setTimeout(() => {
+            window.location.replace(redirectUrl);
+        }, 1000);
+    }
+
+    function showAccessDenied(message) {
+        const accessDenied = document.createElement('div');
+        accessDenied.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: #f44336;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            z-index: 10000;
+            font-family: Arial, sans-serif;
+        `;
+        accessDenied.innerHTML = `
+            <strong>Acesso Negado:</strong> ${message}
+            <br>
+            <small>Redirecionando para login em 5 segundos...</small>
+        `;
+        document.body.appendChild(accessDenied);
+
+        setTimeout(() => {
+            window.location.href = '/login/?error=' + encodeURIComponent(message);
+        }, 5000);
+    }
+
     function updateUserInterface(user) {
-        // Atualizar elementos com dados do usuário
+        console.log('👤 Atualizando interface para usuário:', user.nome);
         const userElements = document.querySelectorAll('[data-user]');
         userElements.forEach(el => {
             const prop = el.getAttribute('data-user');
@@ -91,43 +183,5 @@ document.addEventListener('DOMContentLoaded', function() {
                 el.textContent = user[prop];
             }
         });
-        
-        // Mostrar/ocultar elementos baseado no tipo de usuário
-        const professorElements = document.querySelectorAll('.professor-only');
-        const alunoElements = document.querySelectorAll('.aluno-only');
-        
-        if (user.tipo === 'professor') {
-            professorElements.forEach(el => el.style.display = 'block');
-            alunoElements.forEach(el => el.style.display = 'none');
-        } else if (user.tipo === 'aluno') {
-            professorElements.forEach(el => el.style.display = 'none');
-            alunoElements.forEach(el => el.style.display = 'block');
-        }
-        
-        // Disparar evento personalizado para notificar outros scripts
-        document.dispatchEvent(new CustomEvent('userAuthenticated', {
-            detail: { user }
-        }));
     }
 });
-
-// Função de debug temporária - adicione no final do session-check.js
-function debugSession() {
-    console.log('=== DEBUG DE SESSÃO ===');
-    console.log('Cookie:', document.cookie);
-    console.log('LocalStorage:', localStorage);
-    console.log('SessionStorage:', sessionStorage);
-    
-    fetch('/api/debug/session', { credentials: 'include' })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => console.log('Debug da sessão:', data))
-        .catch(error => console.error('Erro no debug:', error));
-}
-
-// Chame esta função no console do navegador para debug
-window.debugSession = debugSession;

@@ -1,8 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('=== SISTEMA DE LOGIN INICIADO ===');
+    console.log('=== LOGIN PAGE LOADED ===');
     
-    // Verificar se já está logado (com timeout para evitar loop)
-    setTimeout(checkAuthenticationStatus, 100);
+    window.disableSessionCheck = true;
     
     const loginForm = document.getElementById('loginForm');
     const tipoAluno = document.getElementById('tipoAluno');
@@ -12,7 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const turmaGroupProfessor = document.getElementById('turmaGroupProfessor');
     const turmaProfessor = document.getElementById('turmaProfessor');
     
-    // Inicializar estado dos campos de turma
     if (turmaGroupAluno && turmaGroupProfessor) {
         if (tipoAluno && tipoAluno.checked) {
             turmaGroupAluno.style.display = 'block';
@@ -23,7 +21,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Mostrar/ocultar campo de turma baseado no tipo de usuário
     if (tipoAluno && tipoProfessor && turmaGroupAluno && turmaGroupProfessor) {
         tipoAluno.addEventListener('change', function() {
             if (this.checked) {
@@ -44,7 +41,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Adicionar máscara de CPF
     const cpfInput = document.getElementById('cpf');
     if (cpfInput) {
         cpfInput.addEventListener('input', function(e) {
@@ -61,7 +57,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Manipular envio do formulário
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -72,7 +67,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const tipoElement = document.querySelector('input[name="tipo"]:checked');
             const tipo = tipoElement ? tipoElement.value : null;
             
-            // Obter a turma correta baseada no tipo de usuário
             let turma = null;
             if (tipo === 'aluno') {
                 turma = document.getElementById('turmaAluno') ? document.getElementById('turmaAluno').value : null;
@@ -80,7 +74,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 turma = document.getElementById('turmaProfessor') ? document.getElementById('turmaProfessor').value : null;
             }
             
-            // Validações
             if (!cpf || !password || !tipo) {
                 showError('Por favor, preencha todos os campos e selecione o tipo de usuário.');
                 return;
@@ -100,7 +93,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Dados a serem enviados
             const loginData = {
                 cpf: cpf,
                 senha: password,
@@ -110,14 +102,13 @@ document.addEventListener('DOMContentLoaded', function() {
             
             console.log('Enviando dados para a API:', loginData);
             
-            // Enviar requisição para a API de autenticação
             fetch('/api/auth/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(loginData),
-                credentials: 'include' // IMPORTANTE: para enviar cookies
+                credentials: 'include'
             })
             .then(async response => {
                 const responseText = await response.text();
@@ -136,10 +127,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     if (data.success) {
                         showSuccess('Login realizado com sucesso! Redirecionando...');
-                        
-                        // Redireciona diretamente sem verificar novamente
+
+                        // **LINHA ADICIONADA: Armazenar timestamp do login bem-sucedido**
+                        sessionStorage.setItem('lastLogin', Date.now().toString());
+
                         setTimeout(() => {
-                            // Usar replace para evitar que o usuário volte para o login
                             window.location.replace(data.redirectUrl || '/dashboard.html');
                         }, 1000);
                     } else {
@@ -156,7 +148,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Funções auxiliares
     function isValidCPF(cpf) {
         cpf = cpf.replace(/\D/g, '');
         if (cpf.length !== 11) return false;
@@ -234,36 +225,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Função para verificar autenticação
     function checkAuthenticationStatus() {
-        // Só verifica se não estamos na página de login por acidente
-        if (window.location.pathname.includes('login.html') || 
-            window.location.pathname.includes('login')) {
-            
-            fetch('/api/auth/check', {
-                method: 'GET',
-                credentials: 'include'
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Não autenticado');
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.isAuthenticated && data.redirectUrl) {
-                    console.log('Usuário já autenticado, redirecionando...');
-                    // Usar replace para evitar histórico de navegação
-                    window.location.replace(data.redirectUrl);
-                }
-            })
-            .catch(error => {
-                console.log('Usuário não autenticado:', error);
-            });
+        if (window.disableSessionCheck) {
+            console.log('❌ Verificação de sessão desativada nesta página');
+            return;
         }
     }
     
-    // Adicionar link para cadastro se não existir
     if (!document.querySelector('.register-link')) {
         const registerLink = document.createElement('div');
         registerLink.className = 'register-link';

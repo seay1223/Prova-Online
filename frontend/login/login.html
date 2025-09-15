@@ -1,97 +1,125 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/css/login.css">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/css/login.css" />
     <title>Prova Online - Login</title>
-</head>
-<body>
+  </head>
+  <body>
     <div class="nav-container">
-        <div class="navbar">
-            <h1>Prova Online</h1>
-        </div>
+      <div class="navbar">
+        <h1>Prova Online</h1>
+      </div>
     </div>
     <div class="main-container">
-        <div class="login-form-container">
-            <h2 class="login-title">Login</h2>
-            <p class="login-subtitle">Entre com suas credenciais para acessar o sistema</p>
-            <form class="login-form" id="loginForm">
-                <div class="form-group">
-                    <label for="cpf">CPF</label>
-                    <input type="text" id="cpf" name="cpf" placeholder="Digite seu CPF" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Senha</label>
-                    <input type="password" id="password" name="password" placeholder="Digite sua senha" required>
-                </div>
-                <div class="form-group">
-                    <label>Tipo de usuário</label>
-                    <div class="radio-group">
-                        <label>
-                            <input type="radio" name="tipo" value="aluno" id="tipoAluno"> Aluno
-                        </label>
-                        <label>
-                            <input type="radio" name="tipo" value="professor" id="tipoProfessor"> Professor
-                        </label>
-                    </div>
-                </div>
-                <!-- Campo de seleção de turma (visível apenas para alunos) -->
-                <div class="form-group" id="turmaGroupAluno" style="display: none;">
-                    <label for="turmaAluno">Sua turma</label>
-                    <select id="turmaAluno" name="turmaAluno">
-                        <option value="">Selecione sua turma</option>
-                        <option value="9B">9º Ano B</option>
-                        <option value="9A">9º Ano A</option>
-                        <option value="8B">8º Ano B</option>
-                        <option value="8A">8º Ano A</option>
-                        <option value="7A">7º Ano A</option>
-                        <option value="7B">7º Ano B</option>
-                        <option value="6A">6º Ano A</option>
-                        <option value="6B">6º Ano B</option>
-                    </select>
-                </div>
-                <!-- Campo de seleção de turma (visível apenas para professores) -->
-                <div class="form-group" id="turmaGroupProfessor" style="display: none;">
-                    <label for="turmaProfessor">Turma para dar aula</label>
-                    <select id="turmaProfessor" name="turmaProfessor">
-                        <option value="">Selecione a turma</option>
-                        <option value="9B">9º Ano B</option>
-                        <option value="9A">9º Ano A</option>
-                        <option value="8B">8º Ano B</option>
-                        <option value="8A">8º Ano A</option>
-                        <option value="7A">7º Ano A</option>
-                        <option value="7B">7º Ano B</option>
-                        <option value="6A">6º Ano A</option>
-                        <option value="6B">6º Ano B</option>
-                    </select>
-                </div>
-                <div class="form-options">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="remember" name="remember">
-                        <span class="checkmark"></span>
-                        Lembrar-me
-                    </label>
-                    <a href="#" class="forgot-password">Esqueci minha senha</a>
-                </div>
-                <button type="submit" class="btn btn-login">Entrar</button>
-                <div class="register-link">
-                    <p>Não tem uma conta? <a href="/cadastro">Cadastre-se</a></p>
-                </div>
-            </form>
-        </div>
+      <div class="login-form-container">
+        <h2 class="login-title">Login</h2>
+        <p class="login-subtitle">
+          Entre com suas credenciais para acessar o sistema
+        </p>
+        <form class="login-form" id="loginForm">
+          <div class="form-group">
+            <label for="cpf">CPF</label>
+            <input
+              type="text"
+              id="cpf"
+              name="cpf"
+              placeholder="Digite seu CPF"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="password">Senha</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              placeholder="Digite sua senha"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label>Tipo de usuário</label>
+            <div class="radio-group">
+              <label>
+                <input type="radio" name="tipo" value="aluno" id="tipoAluno" />
+                Aluno
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="tipo"
+                  value="professor"
+                  id="tipoProfessor"
+                />
+                Professor
+              </label>
+            </div>
+          </div>
+          <!-- Campo de seleção de turma (visível apenas para alunos) -->
+          <div class="form-group" id="turmaGroupAluno" style="display: none">
+            <label for="turmaAluno">Sua turma</label>
+            <select id="turmaAluno" name="turmaAluno">
+              <option value="">Selecione sua turma</option>
+              <option value="9B">9º Ano B</option>
+              <option value="9A">9º Ano A</option>
+              <option value="8B">8º Ano B</option>
+              <option value="8A">8º Ano A</option>
+              <option value="7A">7º Ano A</option>
+              <option value="7B">7º Ano B</option>
+              <option value="6A">6º Ano A</option>
+              <option value="6B">6º Ano B</option>
+            </select>
+          </div>
+          <!-- Campo de seleção de turma (visível apenas para professores) -->
+          <div
+            class="form-group"
+            id="turmaGroupProfessor"
+            style="display: none"
+          >
+            <label for="turmaProfessor">Turma para dar aula</label>
+            <select id="turmaProfessor" name="turmaProfessor">
+              <option value="">Selecione a turma</option>
+              <option value="9B">9º Ano B</option>
+              <option value="9A">9º Ano A</option>
+              <option value="8B">8º Ano B</option>
+              <option value="8A">8º Ano A</option>
+              <option value="7A">7º Ano A</option>
+              <option value="7B">7º Ano B</option>
+              <option value="6A">6º Ano A</option>
+              <option value="6B">6º Ano B</option>
+            </select>
+          </div>
+          <div class="form-options">
+            <label class="checkbox-container">
+              <input type="checkbox" id="remember" name="remember" />
+              <span class="checkmark"></span>
+              Lembrar-me
+            </label>
+            <a href="#" class="forgot-password">Esqueci minha senha</a>
+          </div>
+          <button type="submit" class="btn btn-login">Entrar</button>
+          <div class="register-link">
+            <p>Não tem uma conta? <a href="/cadastro">Cadastre-se</a></p>
+          </div>
+        </form>
+      </div>
     </div>
     <footer class="footer">
-        <div class="footer-content">
-            <p>&copy; 2025 Prova Online. Todos os direitos reservados.</p>
-            <div class="footer-links">
-                <a href="../termos.html">Termos de Uso</a>
-                <a href="../politica.html">Política de Privacidade</a>
-                <a href="../contato.html">Contato</a>
-            </div>
+      <div class="footer-content">
+        <p>&copy; 2025 Prova Online. Todos os direitos reservados.</p>
+        <div class="footer-links">
+          <a href="../termos.html">Termos de Uso</a>
+          <a href="../politica.html">Política de Privacidade</a>
+          <a href="../contato.html">Contato</a>
         </div>
+      </div>
     </footer>
     <script src="../js/login.js"></script>
     <script src="../js/session-check.js"></script>
-</body>
+    <script>
+      sessionStorage.setItem("skipSessionCheck", "true");
+    </script>
+  </body>
 </html>

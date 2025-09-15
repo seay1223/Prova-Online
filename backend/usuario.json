@@ -7,5 +7,14 @@
     "tipo": "professor",
     "turma": null,
     "dataCadastro": "2025-09-08T18:38:56.983Z"
+  },
+  {
+    "id": "2b25b496-87db-4325-bf62-20a97911b16f",
+    "nome": "Samuel Reis",
+    "cpf": "51833319877",
+    "senha": "Escolasesi123456",
+    "tipo": "aluno",
+    "turma": "9B",
+    "dataCadastro": "2025-09-15T13:04:49.436Z"
   }
 ]
