@@ -151,17 +151,51 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ===== CONFIGURAÇÃO DE SESSÕES =====
+// Configuração de sessão simplificada
 app.use(session({
-    secret: 'prova-online-secret-key-2025',
-    resave: false,
+    secret: 'prova-online-secret-key-2025-' + Math.random().toString(36).substring(2),
+    resave: true,
     saveUninitialized: false,
     cookie: {
-        secure: false, // false para localhost
+        secure: false,
         maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: 'lax'
     }
 }));
+
+// Sistema de limpeza de sessões em memória
+const activeSessions = new Map();
+app.use((req, res, next) => {
+    if (req.session && req.session.user) {
+        activeSessions.set(req.sessionID, {
+            userId: req.session.user.id,
+            lastAccess: Date.now()
+        });
+    }
+    next();
+});
+
+// Limpar sessões expiradas a cada hora
+setInterval(() => {
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    
+    for (const [sessionId, sessionData] of activeSessions.entries()) {
+        if (now - sessionData.lastAccess > oneDay) {
+            activeSessions.delete(sessionId);
+        }
+    }
+    console.log('Sessões ativas:', activeSessions.size);
+}, 60 * 60 * 1000);
+
+// Middleware para garantir que a sessão seja salva
+app.use((req, res, next) => {
+    if (!req.session) {
+        return next(new Error('Session not available'));
+    }
+    next();
+});
 
 // Middleware para debug de sessões
 app.use((req, res, next) => {
@@ -207,7 +241,7 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 function checkAuth(req, res, next) {
     console.log('[AUTH] Verificando autenticação para:', req.path);
     
-    // Lista de rotas públicas que não requerem autenticação
+    // Lista de rotas públicas ampliada
     const publicRoutes = [
         '/',
         '/login',
@@ -221,11 +255,20 @@ function checkAuth(req, res, next) {
         '/api/cadastro',
         '/api/test',
         '/health',
-        '/api/status'
+        '/api/status',
+        '/api/debug/session',
+        '/favicon.ico',
+        '/css/',
+        '/js/',
+        '/images/'
     ];
     
-    // Se é uma rota pública, não verificar autenticação
-    if (publicRoutes.includes(req.path) || req.path.startsWith('/public/')) {
+    // Verificar se é uma rota pública
+    const isPublicRoute = publicRoutes.some(route => 
+        req.path === route || req.path.startsWith(route)
+    );
+    
+    if (isPublicRoute) {
         console.log('[AUTH] Rota pública, acesso permitido');
         return next();
     }
@@ -546,26 +589,36 @@ app.post('/api/auth/login', async (req, res) => {
             turma: usuario.turma
         };
         
-        req.session.user = userSession;
-        
-        console.log('Sessão criada com sucesso para:', userSession.nome);
-        
-        // SALVAR A SESSÃO ANTES DE RESPONDER
-        req.session.save((err) => {
+        req.session.regenerate((err) => {
             if (err) {
-                console.error('Erro ao salvar sessão:', err);
+                console.error('Erro ao regenerar sessão:', err);
                 return res.status(500).json({
                     success: false,
                     message: 'Erro interno do servidor'
                 });
             }
             
-            // Enviar URLs completas com .html
-            res.json({
-                success: true,
-                message: 'Login realizado com sucesso!',
-                user: userSession,
-                redirectUrl: tipo === 'aluno' ? '/aluno/aluno.html' : '/professor/professor.html'
+            req.session.user = userSession;
+            
+            console.log('Sessão criada com sucesso para:', userSession.nome);
+            
+            // SALVAR A SESSÃO ANTES DE RESPONDER
+            req.session.save((err) => {
+                if (err) {
+                    console.error('Erro ao salvar sessão:', err);
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Erro interno do servidor'
+                    });
+                }
+                
+                // Enviar URLs completas com .html
+                res.json({
+                    success: true,
+                    message: 'Login realizado com sucesso!',
+                    user: userSession,
+                    redirectUrl: tipo === 'aluno' ? '/aluno/aluno.html' : '/professor/professor.html'
+                });
             });
         });
     } catch (error) {
@@ -613,8 +666,10 @@ app.get('/api/debug/session', (req, res) => {
     res.json({
         sessionID: req.sessionID,
         session: req.session,
-        user: req.session.user,
-        headers: req.headers
+        user: req.session?.user,
+        headers: req.headers,
+        cookies: req.cookies,
+        activeSessions: Array.from(activeSessions.entries())
     });
 });
 
@@ -1241,6 +1296,7 @@ initializeDatabase().then(() => {
         console.log('✅ Rota /api/debug/session disponível para diagnóstico');
         console.log('⚡ Modo otimizado ativado - Processamento em lote e fila assíncrona');
         console.log('🔑 Usuários agora são armazenados no arquivo usuario.json');
+        console.log('💾 Sessões agora são gerenciadas em memória com limpeza automática');
         console.log('📝 Exemplo de usuário para teste:');
         console.log('   Professor: CPF=12345678901, Senha=senha123, Tipo=professor');
         console.log('   Aluno: CPF=10987654321, Senha=senha123, Tipo=aluno, Turma=3A');
