@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const turmaGroupProfessor = document.getElementById('turmaGroupProfessor');
     const turmaProfessor = document.getElementById('turmaProfessor');
     
+    // Configuração inicial dos campos de turma
     if (turmaGroupAluno && turmaGroupProfessor) {
         if (tipoAluno && tipoAluno.checked) {
             turmaGroupAluno.style.display = 'block';
@@ -21,6 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Event listeners para alternar entre aluno e professor
     if (tipoAluno && tipoProfessor && turmaGroupAluno && turmaGroupProfessor) {
         tipoAluno.addEventListener('change', function() {
             if (this.checked) {
@@ -41,6 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Formatação do CPF
     const cpfInput = document.getElementById('cpf');
     if (cpfInput) {
         cpfInput.addEventListener('input', function(e) {
@@ -57,6 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Submissão do formulário de login
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -128,8 +132,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.success) {
                         showSuccess('Login realizado com sucesso! Redirecionando...');
 
-                        // **LINHA ADICIONADA: Armazenar timestamp do login bem-sucedido**
+                        // Armazenar informações do usuário no sessionStorage para uso posterior
                         sessionStorage.setItem('lastLogin', Date.now().toString());
+                        sessionStorage.setItem('userData', JSON.stringify(data.user));
 
                         setTimeout(() => {
                             window.location.replace(data.redirectUrl || '/dashboard.html');
@@ -148,6 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Função para validar CPF
     function isValidCPF(cpf) {
         cpf = cpf.replace(/\D/g, '');
         if (cpf.length !== 11) return false;
@@ -174,6 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
     
+    // Funções para exibir mensagens
     function showError(mensagem) {
         removeMessages();
         
@@ -232,6 +239,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Adicionar link de cadastro se não existir
     if (!document.querySelector('.register-link')) {
         const registerLink = document.createElement('div');
         registerLink.className = 'register-link';
@@ -243,3 +251,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// Função auxiliar para obter o ID do usuário logado (para uso em outras páginas)
+function getUserId() {
+    try {
+        const userData = sessionStorage.getItem('userData');
+        if (userData) {
+            const user = JSON.parse(userData);
+            return user.id;
+        }
+        
+        // Fallback: verificar se há sessão ativa
+        return fetch('/api/auth/check', {
+            credentials: 'include'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.isAuthenticated && data.user) {
+                sessionStorage.setItem('userData', JSON.stringify(data.user));
+                return data.user.id;
+            }
+            return null;
+        })
+        .catch(error => {
+            console.error('Erro ao verificar autenticação:', error);
+            return null;
+        });
+    } catch (error) {
+        console.error('Erro ao obter ID do usuário:', error);
+        return null;
+    }
+}
