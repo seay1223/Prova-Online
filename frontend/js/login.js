@@ -136,8 +136,45 @@ document.addEventListener('DOMContentLoaded', function() {
                         sessionStorage.setItem('lastLogin', Date.now().toString());
                         sessionStorage.setItem('userData', JSON.stringify(data.user));
 
+                        // REDIRECIONAMENTO CORRIGIDO
                         setTimeout(() => {
-                            window.location.replace(data.redirectUrl || '/dashboard.html');
+                            // Armazenar informações do usuário de forma mais completa
+                            if (data.user) {
+                                sessionStorage.setItem('userType', data.user.tipo);
+                                sessionStorage.setItem('userClass', data.user.turma || turma);
+                                sessionStorage.setItem('userToken', data.token || '');
+                                sessionStorage.setItem('isAuthenticated', 'true');
+                                
+                                // Adicionar timestamp para controle de sessão
+                                sessionStorage.setItem('loginTime', Date.now().toString());
+                            }
+                            
+                            // Verificar se há um redirectUrl na resposta da API
+                            if (data.redirectUrl) {
+                                window.location.href = data.redirectUrl;
+                                return;
+                            }
+                            
+                            // Redirecionar conforme o tipo de usuário com fallbacks
+                            if (data.user && data.user.tipo === 'aluno') {
+                                window.location.href = '/UrlUnico/url.html';
+                            } else if (data.user && data.user.tipo === 'professor') {
+                                // Testar se o dashboard do professor existe antes de redirecionar
+                                checkPageExists('/professor/professor.html')
+                                    .then(exists => {
+                                        if (exists) {
+                                            window.location.href = '/professor/professor.html';
+                                        } else {
+                                            // Fallback para dashboard geral se específico não existir
+                                            window.location.href = '/professor.html';
+                                        }
+                                    })
+                                    .catch(() => {
+                                        window.location.href = '/professor.html';
+                                    });
+                            } else {
+                                window.location.href = '/professor.html';
+                            }
                         }, 1000);
                     } else {
                         showError(data.message || 'CPF, senha ou tipo de usuário incorretos.');
@@ -251,6 +288,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// Função para verificar se uma página existe
+function checkPageExists(url) {
+    return fetch(url, { method: 'HEAD' })
+        .then(response => response.status !== 404)
+        .catch(() => false);
+}
 
 // Função auxiliar para obter o ID do usuário logado (para uso em outras páginas)
 function getUserId() {

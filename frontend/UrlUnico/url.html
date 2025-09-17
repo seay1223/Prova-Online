@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prova Online - Área do Aluno</title>
+    <link rel="stylesheet" href="/css/url.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Prova Online - Área do Aluno</h1>
+            <div class="user-info">
+                <span id="userName">Samuel Reis</span>
+                <span id="userCpf">CPF: 518.333.198-77</span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="welcome-section">
+                <h2>Bem-vindo à sua área de aluno</h2>
+                <p>Acesse suas provas e acompanhe seu desempenho</p>
+            </div>
+            
+            <div class="url-section">
+                <h3>🌐 Sua URL de Acesso Exclusivo</h3>
+                <p class="url-desc">Use este link para acessar diretamente sua área:</p>
+                
+                <div class="url-container">
+                    <input type="text" value="https://localhost:3000/aluno/2b25b496-87db-4325-bf62-20a97911b16f" 
+                           readonly class="url-input" id="urlInput">
+                    <button class="btn-copy" onclick="copyUrl()">📋 Copiar URL</button>
+                </div>
+                
+                <div class="url-actions">
+                    <button class="btn-open" onclick="openUrl()">
+                        🔗 Abrir em Nova Guia
+                    </button>
+                    <button class="btn-share" onclick="shareUrl()">
+                        📤 Compartilhar
+                    </button>
+                </div>
+                
+                <div class="benefits">
+                    <h4>⭐ Vantagens da URL única</h4>
+                    <ul>
+                        <li>Acesso rápido e direto à sua área</li>
+                        <li>Maior segurança com identificação única</li>
+                        <li>Link personalizado somente para você</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Sistema de Provas Online &copy; 2023 - Todos os direitos reservados</p>
+        </div>
+    </div>
+    
+    <div class="toast" id="toast">✅ URL copiada para a área de transferência!</div>
+    <script src="../js/url.js"></script>
+</body>
+</html>

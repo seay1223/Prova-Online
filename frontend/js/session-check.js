@@ -95,17 +95,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const currentPath = window.location.pathname;
 
-        if (currentPath.includes('/login')) {
-            console.log('📋 Usuário autenticado na página de login, redirecionando...');
-            const redirectUrl = user.tipo === 'professor' ? '/professor/professor.html' : '/aluno/aluno.html';
-            
-            if (currentPath !== redirectUrl) {
-                window.location.href = redirectUrl;
-            } else {
-                console.log('⚠️ Já está na página destino, evitando redirecionamento');
-            }
-            return;
-        }
+        // REMOVA O BLOCO DE REDIRECIONAMENTO DO LOGIN
+        // Deixe apenas a verificação de permissões:
 
         const isProfessorPage = currentPath.includes('/professor');
         const isAlunoPage = currentPath.includes('/aluno');

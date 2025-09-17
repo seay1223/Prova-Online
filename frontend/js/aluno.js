@@ -1,4 +1,4 @@
-console.log("aluno.js carregado - versão com links únicos por ID");
+console.log("aluno.js carregado - versão sem URL única");
 console.log("=== DEBUG SESSION ===");
 console.log("Window location:", window.location.href);
 console.log("Path:", window.location.pathname);
@@ -42,11 +42,11 @@ window.serverService = {
     }
   },
 
-  // Buscar provas do aluno com links únicos
-  getProvasComLinks: async function () {
+  // Buscar provas do aluno
+  getProvas: async function () {
     try {
-      console.log("Buscando provas do aluno com links únicos...");
-      const response = await fetch("/api/aluno/provas-com-links", {
+      console.log("Buscando provas do aluno...");
+      const response = await fetch("/api/aluno/provas", {
         credentials: "include",
         headers: { Accept: "application/json" },
       });
@@ -56,41 +56,11 @@ window.serverService = {
       }
 
       const data = await response.json();
-      console.log("Provas com links recebidas:", data);
+      console.log("Provas recebidas:", data);
       return data;
     } catch (error) {
       console.error("Erro ao buscar provas:", error);
       return [];
-    }
-  },
-
-  // Gerar URL única do aluno
-  // No objeto serverService, corrija a função:
-  getUrlUnica: async function () {
-    try {
-      console.log("Gerando URL única do aluno...");
-      const response = await fetch("/api/aluno/url-unica", {
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("Resposta da URL única:", response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Erro na resposta:", errorText);
-        throw new Error(`Erro HTTP ${response.status} ao gerar URL única`);
-      }
-
-      const data = await response.json();
-      console.log("URL única recebida:", data);
-      return data;
-    } catch (error) {
-      console.error("Erro ao gerar URL única:", error);
-      return null;
     }
   },
 
@@ -109,7 +79,7 @@ window.serverService = {
 
 // Função principal quando o documento carrega
 document.addEventListener("DOMContentLoaded", async function () {
-  console.log("=== PÁGINA DO ALUNO - LINKS ÚNICOS ===");
+  console.log("=== PÁGINA DO ALUNO - SEM URL ÚNICA ===");
 
   await checkAuthentication();
   setupEventListeners();
@@ -138,7 +108,7 @@ async function checkAuthentication() {
   }
 
   updateUserInfo(user);
-  carregarProvasComLinks();
+  carregarProvas();
 }
 
 // Redirecionar para login
@@ -148,7 +118,7 @@ function redirectToLogin() {
 }
 
 // Atualizar informações do usuário
-async function updateUserInfo(user) {
+function updateUserInfo(user) {
   const userName = user.nome || "Aluno";
   const userCpf = user.cpf || "";
   const userTurma = user.turma || "";
@@ -174,148 +144,6 @@ async function updateUserInfo(user) {
   const userInfo = document.getElementById("userInfo");
   if (userInfo) {
     userInfo.textContent = `${userName} (${userTurma})`;
-  }
-
-  // Gerar e exibir URL única
-  await exibirUrlUnica(user.id);
-}
-
-// Função para exibir URL única
-async function exibirUrlUnica(alunoId) {
-  try {
-    console.log("Solicitando URL única para aluno:", alunoId);
-    const urlUnicaData = await serverService.getUrlUnica();
-
-    if (!urlUnicaData) {
-      console.warn("Não foi possível obter URL única");
-      return;
-    }
-
-    // Criar ou atualizar seção de URL única
-    let urlSection = document.getElementById("urlUnicaSection");
-
-    if (!urlSection) {
-      urlSection = document.createElement("div");
-      urlSection.id = "urlUnicaSection";
-      urlSection.className = "url-unica-section";
-
-      // Inserir após a seção de boas-vindas
-      const welcomeSection = document.querySelector(".welcome-section");
-      if (welcomeSection) {
-        welcomeSection.parentNode.insertBefore(
-          urlSection,
-          welcomeSection.nextSibling
-        );
-      }
-    }
-
-    urlSection.innerHTML = `
-            <div class="url-unica-card">
-                <h3>🌐 Sua URL de Acesso Exclusivo</h3>
-                <p class="url-descricao">Use este link para acessar diretamente sua área:</p>
-                
-                <div class="url-container">
-                    <input type="text" value="${urlUnicaData.url_unica}" 
-                           readonly class="url-input" id="urlUnicaInput">
-                    <button onclick="copiarUrlUnica()" class="btn-copiar-url">
-                        📋 Copiar URL
-                    </button>
-                </div>
-                
-                <div class="url-actions">
-                    <button onclick="abrirUrlUnica()" class="btn-abrir-url">
-                        🔗 Abrir em Nova Guia
-                    </button>
-                    <button onclick="compartilharUrlUnica()" class="btn-compartilhar">
-                        📤 Compartilhar
-                    </button>
-                </div>
-                
-                <div class="url-info">
-                    <p>⭐ <strong>Vantagens da URL única:</strong></p>
-                    <ul>
-                        <li>Acesso rápido e direto à sua área</li>
-                        <li>Maior segurança com identificação única</li>
-                        <li>Link personalizado somente para você</li>
-                    </ul>
-                </div>
-            </div>
-        `;
-  } catch (error) {
-    console.error("Erro ao exibir URL única:", error);
-
-    // Exibir mensagem de erro amigável para o usuário
-    const urlSection =
-      document.getElementById("urlUnicaSection") ||
-      document.createElement("div");
-    urlSection.id = "urlUnicaSection";
-    urlSection.className = "url-unica-section";
-    urlSection.innerHTML = `
-            <div class="url-unica-card erro">
-                <h3>⚠️ Erro ao gerar URL única</h3>
-                <p>Não foi possível gerar sua URL de acesso exclusiva neste momento.</p>
-                <button onclick="exibirUrlUnica('${alunoId}')" class="btn-tentar-novamente">
-                    🔄 Tentar Novamente
-                </button>
-            </div>
-        `;
-
-    // Inserir na página se ainda não existir
-    if (!document.getElementById("urlUnicaSection")) {
-      const welcomeSection = document.querySelector(".welcome-section");
-      if (welcomeSection) {
-        welcomeSection.parentNode.insertBefore(
-          urlSection,
-          welcomeSection.nextSibling
-        );
-      }
-    }
-  }
-}
-
-// Função para copiar URL única
-function copiarUrlUnica() {
-  const input = document.getElementById("urlUnicaInput");
-  if (!input) return;
-
-  input.select();
-  input.setSelectionRange(0, 99999);
-
-  try {
-    navigator.clipboard.writeText(input.value);
-    mostrarMensagem("✅ URL copiada para a área de transferência!", "success");
-  } catch (error) {
-    document.execCommand("copy");
-    mostrarMensagem("✅ URL copiada!", "success");
-  }
-}
-
-// Função para abrir URL única
-function abrirUrlUnica() {
-  const input = document.getElementById("urlUnicaInput");
-  if (!input) return;
-
-  window.open(input.value, "_blank");
-}
-
-// Função para compartilhar URL única
-async function compartilharUrlUnica() {
-  const input = document.getElementById("urlUnicaInput");
-  if (!input) return;
-
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: "Minha Área do Aluno - PROVA-ONLINE",
-        text: "Acesse minha área exclusiva no sistema PROVA-ONLINE",
-        url: input.value,
-      });
-    } else {
-      copiarUrlUnica();
-      mostrarMensagem("✅ URL copiada! Cole para compartilhar.", "success");
-    }
-  } catch (error) {
-    console.log("Compartilhamento cancelado");
   }
 }
 
@@ -346,18 +174,18 @@ function setupEventListeners() {
   const refreshBtn = document.getElementById("refreshBtn");
   if (refreshBtn) {
     refreshBtn.addEventListener("click", function () {
-      carregarProvasComLinks();
+      carregarProvas();
     });
   }
 }
 
-// Carregar provas com links únicos
-async function carregarProvasComLinks() {
-  console.log("Carregando provas com links únicos...");
+// Carregar provas
+async function carregarProvas() {
+  console.log("Carregando provas...");
   showLoading("Carregando suas provas...");
 
   try {
-    const provas = await serverService.getProvasComLinks();
+    const provas = await serverService.getProvas();
     hideLoading();
 
     if (provas.length === 0) {
@@ -365,7 +193,7 @@ async function carregarProvasComLinks() {
       return;
     }
 
-    exibirProvasComLinks(provas);
+    exibirProvas(provas);
   } catch (error) {
     console.error("Erro ao carregar provas:", error);
     hideLoading();
@@ -373,8 +201,8 @@ async function carregarProvasComLinks() {
   }
 }
 
-// Exibir provas com links únicos
-function exibirProvasComLinks(provas) {
+// Exibir provas
+function exibirProvas(provas) {
   const container =
     document.getElementById("provasContainer") ||
     document.getElementById("provas-container");
@@ -387,13 +215,13 @@ function exibirProvasComLinks(provas) {
   container.innerHTML = "";
 
   provas.forEach((prova) => {
-    const provaElement = criarElementoProvaComLink(prova);
+    const provaElement = criarElementoProva(prova);
     container.appendChild(provaElement);
   });
 }
 
-// Criar elemento de prova com link único
-function criarElementoProvaComLink(prova) {
+// Criar elemento de prova
+function criarElementoProva(prova) {
   const card = document.createElement("div");
   card.className = "prova-card";
 
@@ -401,120 +229,43 @@ function criarElementoProvaComLink(prova) {
   const agora = new Date();
   const dataLimite = new Date(prova.data_limite);
   const expirada = agora > dataLimite;
-  const utilizada = prova.utilizado;
 
   if (expirada) {
     card.classList.add("expirada");
-  }
-  if (utilizada) {
-    card.classList.add("realizada");
   }
 
   card.innerHTML = `
         <div class="prova-header">
             <h3 class="prova-titulo">${prova.titulo}</h3>
             <div class="status-badges">
-                ${
-                  expirada ? '<span class="badge-expirada">Expirada</span>' : ""
-                }
-                ${
-                  utilizada
-                    ? '<span class="badge-realizada">Realizada</span>'
-                    : ""
-                }
-                ${
-                  !expirada && !utilizada
-                    ? '<span class="badge-disponivel">Disponível</span>'
-                    : ""
-                }
+                ${expirada ? '<span class="badge-expirada">Expirada</span>' : ''}
+                ${!expirada ? '<span class="badge-disponivel">Disponível</span>' : ''}
             </div>
         </div>
         
         <div class="prova-info">
             <p><strong>Disciplina:</strong> ${prova.disciplina}</p>
-            <p><strong>Data limite:</strong> ${formatDate(
-              prova.data_limite
-            )}</p>
-            <p><strong>Tempo:</strong> ${
-              prova.tempo_limite || "N/A"
-            } minutos</p>
-            ${
-              prova.descricao
-                ? `<p><strong>Descrição:</strong> ${prova.descricao}</p>`
-                : ""
-            }
+            <p><strong>Data limite:</strong> ${formatDate(prova.data_limite)}</p>
+            <p><strong>Tempo:</strong> ${prova.tempo_limite || "N/A"} minutos</p>
+            ${prova.descricao ? `<p><strong>Descrição:</strong> ${prova.descricao}</p>` : ''}
         </div>
         
-        ${
-          prova.link_unico
-            ? `
-            <div class="link-unico-section">
-                <h4>🔗 Seu Link de Acesso Único</h4>
-                <div class="link-container">
-                    <input type="text" value="${
-                      window.location.origin
-                    }/acesso-unico/${prova.link_unico}" 
-                           readonly class="link-input" id="link-${prova.id}">
-                    <button onclick="copiarLink('${
-                      prova.id
-                    }')" class="btn-copiar">
-                        📋 Copiar
-                    </button>
-                </div>
-                
-                ${
-                  !expirada && !utilizada
-                    ? `
-                    <a href="/acesso-unico/${prova.link_unico}" class="btn-acessar-prova" target="_blank">
-                        🚀 Iniciar Prova
-                    </a>
-                `
-                    : ""
-                }
-                
-                ${
-                  utilizada
-                    ? `
-                    <p class="info-realizada">✅ Você já realizou esta prova</p>
-                `
-                    : ""
-                }
-                
-                ${
-                  expirada && !utilizada
-                    ? `
-                    <p class="info-expirada">⏰ Prazo para realização expirado</p>
-                `
-                    : ""
-                }
-            </div>
-        `
-            : `
-            <div class="link-unico-section">
-                <p class="gerando-link">⏳ Gerando seu link de acesso único...</p>
-            </div>
-        `
-        }
+        <div class="prova-actions">
+            ${
+              !expirada
+                ? `
+                <a href="/prova/${prova.id}" class="btn-iniciar-prova">
+                    🚀 Iniciar Prova
+                </a>
+            `
+                : `
+                <p class="info-expirada">⏰ Prazo para realização expirado</p>
+            `
+            }
+        </div>
     `;
 
   return card;
-}
-
-// Função para copiar link
-function copiarLink(provaId) {
-  const input = document.getElementById(`link-${provaId}`);
-  if (!input) return;
-
-  input.select();
-  input.setSelectionRange(0, 99999);
-
-  try {
-    navigator.clipboard.writeText(input.value);
-    mostrarMensagem("✅ Link copiado para a área de transferência!", "success");
-  } catch (error) {
-    document.execCommand("copy");
-    mostrarMensagem("✅ Link copiado!", "success");
-  }
 }
 
 // Funções auxiliares
@@ -541,7 +292,7 @@ function showNoExamsMessage() {
                 <div class="no-results-icon">📚</div>
                 <h3>Nenhuma prova disponível</h3>
                 <p>Você não tem nenhuma prova atribuída no momento.</p>
-                <button onclick="carregarProvasComLinks()" class="btn-recarregar">
+                <button onclick="carregarProvas()" class="btn-recarregar">
                     🔄 Recarregar
                 </button>
             </div>
@@ -593,10 +344,10 @@ function showError(message) {
                 <div class="error-icon">⚠️</div>
                 <h3>Erro ao carregar</h3>
                 <p>${message}</p>
-                <button onclick="carregarProvasComLinks()" class="btn-tentar-novamente">
+                <button onclick="carregarProvas()" class="btn-tentar-novamente">
                     🔄 Tentar Novamente
                 </button>
-        </div>
+            </div>
         `;
   }
 }
@@ -657,10 +408,6 @@ function addStyles() {
             background-color: #f8f9fa;
         }
         
-        .prova-card.realizada {
-            border-left: 4px solid #4CAF50;
-        }
-        
         .prova-header {
             display: flex;
             justify-content: space-between;
@@ -683,7 +430,7 @@ function addStyles() {
             flex-wrap: wrap;
         }
         
-        .badge-expirada, .badge-realizada, .badge-disponivel {
+        .badge-expirada, .badge-disponivel {
             padding: 4px 12px;
             border-radius: 20px;
             font-size: 12px;
@@ -694,12 +441,6 @@ function addStyles() {
             background: #ffebee;
             color: #c62828;
             border: 1px solid #ef5350;
-        }
-        
-        .badge-realizada {
-            background: #e8f5e9;
-            color: #2e7d32;
-            border: 1px solid #66bb6a;
         }
         
         .badge-disponivel {
@@ -718,50 +459,13 @@ function addStyles() {
             line-height: 1.5;
         }
         
-        .link-unico-section {
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
+        .prova-actions {
+            text-align: center;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
         }
         
-        .link-unico-section h4 {
-            margin: 0 0 12px 0;
-            color: #2c3e50;
-            font-size: 16px;
-        }
-        
-        .link-container {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        
-        .link-input {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-            background: white;
-        }
-        
-        .btn-copiar {
-            padding: 12px 16px;
-            background: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background 0.2s ease;
-        }
-        
-        .btn-copiar:hover {
-            background: #1976D2;
-        }
-        
-        .btn-acessar-prova {
+        .btn-iniciar-prova {
             display: inline-block;
             padding: 12px 24px;
             background: #4CAF50;
@@ -772,33 +476,18 @@ function addStyles() {
             transition: background 0.2s ease;
         }
         
-        .btn-acessar-prova:hover {
+        .btn-iniciar-prova:hover {
             background: #45a049;
         }
         
-        .info-realizada, .info-expirada, .gerando-link {
-            padding: 12px;
-            border-radius: 6px;
-            margin: 0;
-            font-weight: 500;
-        }
-        
-        .info-realizada {
-            background: #e8f5e9;
-            color: #2e7d32;
-            border: 1px solid #c8e6c9;
-        }
-        
         .info-expirada {
+            padding: 12px;
             background: #ffebee;
             color: #c62828;
+            border-radius: 6px;
             border: 1px solid #ef9a9a;
-        }
-        
-        .gerando-link {
-            background: #fff3e0;
-            color: #ef6c00;
-            border: 1px solid #ffcc80;
+            font-weight: 500;
+            text-align: center;
         }
         
         .no-results, .error-container {
@@ -846,144 +535,13 @@ function addStyles() {
             100% { transform: rotate(360deg); }
         }
         
-        /* Estilos para a seção de URL única */
-        .url-unica-section {
-            margin: 20px 0;
-        }
-        
-        .url-unica-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-        
-        .url-unica-card h3 {
-            margin: 0 0 15px 0;
-            font-size: 22px;
-            font-weight: 600;
-        }
-        
-        .url-descricao {
-            margin: 0 0 20px 0;
-            opacity: 0.9;
-            font-size: 15px;
-        }
-        
-        .url-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .url-input {
-            flex: 1;
-            padding: 12px 15px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 8px;
-            background: rgba(255,255,255,0.1);
-            color: white;
-            font-size: 14px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .url-input::placeholder {
-            color: rgba(255,255,255,0.7);
-        }
-        
-        .btn-copiar-url, .btn-abrir-url, .btn-compartilhar {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            white-space: nowrap;
-        }
-        
-        .btn-copiar-url {
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: 2px solid rgba(255,255,255,0.3);
-        }
-        
-        .btn-copiar-url:hover {
-            background: rgba(255,255,255,0.3);
-        }
-        
-        .btn-abrir-url {
-            background: #4CAF50;
-            color: white;
-        }
-        
-        .btn-abrir-url:hover {
-            background: #45a049;
-            transform: translateY(-2px);
-        }
-        
-        .btn-compartilhar {
-            background: #2196F3;
-            color: white;
-        }
-        
-        .btn-compartilhar:hover {
-            background: #1976D2;
-            transform: translateY(-2px);
-        }
-        
-        .url-actions {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .url-info {
-            background: rgba(255,255,255,0.1);
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        
-        .url-info p {
-            margin: 0 0 10px 0;
-            font-weight: 600;
-        }
-        
-        .url-info ul {
-            margin: 0;
-            padding-left: 20px;
-        }
-        
-        .url-info li {
-            margin: 5px 0;
-            opacity: 0.9;
-        }
-        
         @media (max-width: 768px) {
             .prova-header {
                 flex-direction: column;
             }
             
-            .link-container {
-                flex-direction: column;
-            }
-            
             .prova-card {
                 padding: 16px;
-            }
-            
-            .url-container {
-                flex-direction: column;
-            }
-            
-            .url-actions {
-                flex-direction: column;
-            }
-            
-            .btn-copiar-url, .btn-abrir-url, .btn-compartilhar {
-                width: 100%;
             }
         }
         
@@ -1003,10 +561,6 @@ function addStyles() {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         
-        .prova-card.realizada::before {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-        }
-        
         .prova-card.expirada::before {
             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
         }
@@ -1016,11 +570,7 @@ function addStyles() {
 }
 
 // Funções globais
-window.copiarLink = copiarLink;
-window.carregarProvasComLinks = carregarProvasComLinks;
-window.copiarUrlUnica = copiarUrlUnica;
-window.abrirUrlUnica = abrirUrlUnica;
-window.compartilharUrlUnica = compartilharUrlUnica;
+window.carregarProvas = carregarProvas;
 window.sair = async function () {
   if (confirm("Tem certeza que deseja sair?")) {
     await serverService.clearAuthData();
@@ -1028,4 +578,4 @@ window.sair = async function () {
   }
 };
 
-console.log("aluno.js com links únicos inicializado com sucesso");
+console.log("aluno.js sem URL única inicializado com sucesso");

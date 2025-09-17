@@ -8,12 +8,30 @@ import crypto from "crypto";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 import session from "express-session";
+import jwt from "jsonwebtoken";
+import dotenv from "dotenv"; // Import correto do dotenv
 
 // Configuração do __dirname para ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Carregar variáveis de ambiente
+dotenv.config();
+
 const app = express();
-const PORT = 3000;
+
+// Verificar variáveis essenciais
+if (!process.env.JWT_SECRET) {
+    console.error('❌ ERRO: JWT_SECRET não definida no .env');
+    process.exit(1);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const PORT = process.env.PORT || 3000; // Usar porta do .env ou default 3000
+
+
+console.log('✅ Ambiente:', process.env.NODE_ENV || 'development');
+console.log('✅ Porta do servidor:', process.env.PORT || 3000);
 
 // Inicializar o banco de dados
 let db;
@@ -189,13 +207,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware para debug de sessões
+// Middleware para debug de sessões - MELHORADO
 app.use((req, res, next) => {
   console.log("=== SESSION DEBUG ===");
+  console.log("URL:", req.url);
+  console.log("Method:", req.method);
   console.log("Session ID:", req.sessionID);
   console.log("Session data:", JSON.stringify(req.session, null, 2));
   console.log("User in session:", req.session?.user);
-  console.log("========================");
+  console.log("Authorization Header:", req.headers.authorization);
+  console.log("=========================");
   next();
 });
 
@@ -209,9 +230,36 @@ app.use((req, res, next) => {
 // Servir todos os arquivos estáticos da pasta frontend
 app.use(express.static(path.join(__dirname, "../frontend")));
 
-// ===== MIDDLEWARE DE AUTENTICAÇÃO =====
+// ===== MIDDLEWARE DE AUTENTICAÇÃO - CORRIGIDO COM JWT =====
 function checkAuth(req, res, next) {
-  console.log("[AUTH] Verificando autenticação para:", req.path);
+  console.log("=== CHECK AUTH MIDDLEWARE ===");
+  console.log("Session:", req.session);
+  console.log("Headers:", req.headers);
+  
+  // Primeiro tenta pela sessão (compatibilidade)
+  if (req.session && req.session.user) {
+    console.log("Autenticado por sessão:", req.session.user);
+    req.user = req.session.user;
+    return next();
+  }
+  
+  // Se não tem sessão, tenta por token JWT no header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      console.log("Autenticado por token:", decoded);
+      req.user = decoded;
+      return next();
+    } catch (error) {
+      console.log("Token inválido:", error.message);
+    }
+  }
+  
+  // Se nenhum método funcionou
+  console.log("Usuário não autenticado");
+  
   const publicRoutes = [
     "/",
     "/login",
@@ -243,14 +291,6 @@ function checkAuth(req, res, next) {
     return next();
   }
 
-  if (req.session && req.session.user) {
-    console.log("[AUTH] Usuário autenticado:", req.session.user.nome);
-    req.user = req.session.user;
-    return next();
-  }
-
-  console.log("[AUTH] Usuário não autenticado para rota:", req.path);
-
   if (req.path.startsWith("/api/")) {
     return res.status(401).json({
       error: "Não autenticado",
@@ -264,21 +304,19 @@ function checkAuth(req, res, next) {
 // Middleware para verificar se usuário está autenticado como professor
 function requireProfessorAuth(req, res, next) {
   console.log("[AUTH] Verificando autenticação para professor...");
-  if (!req.session) {
-    console.log("[AUTH] Nenhuma sessão encontrada");
+  if (!req.session && !req.headers.authorization) {
+    console.log("[AUTH] Nenhuma sessão ou token encontrado");
     return res.redirect("/login/?error=Sessão não encontrada");
   }
-  if (!req.session.user) {
-    console.log("[AUTH] Nenhum usuário na sessão");
-    return res.redirect("/login/?error=Usuário não autenticado");
-  }
-  if (req.session.user.tipo === "professor") {
+  
+  // Verificar se é professor
+  if (req.user && req.user.tipo === "professor") {
     console.log("[AUTH] Autenticação bem-sucedida para professor");
     next();
   } else {
     console.log(
       "[AUTH] Falha na autenticação. Tipo de usuário:",
-      req.session.user.tipo
+      req.user ? req.user.tipo : "Não definido"
     );
     if (req.xhr || req.headers.accept.indexOf("json") > -1) {
       return res.status(401).json({
@@ -430,10 +468,13 @@ app.post("/api/cadastro", async (req, res) => {
   }
 });
 
+// ===== ENDPOINT DE LOGIN CORRIGIDO COM GERAÇÃO DE TOKEN JWT =====
 app.post("/api/auth/login", async (req, res) => {
   console.log("=== TENTATIVA DE LOGIN RECEBIDA ===");
   try {
     const { cpf, senha, tipo, turma } = req.body;
+    console.log("Dados de login recebidos:", { cpf, tipo, turma });
+    
     if (!cpf || !senha || !tipo) {
       console.log("Dados incompletos");
       return res.status(400).json({
@@ -441,6 +482,7 @@ app.post("/api/auth/login", async (req, res) => {
         message: "Todos os campos são obrigatórios",
       });
     }
+    
     const usuariosPath = path.join(__dirname, "usuario.json");
     if (!fs.existsSync(usuariosPath)) {
       console.log("Arquivo usuario.json não encontrado");
@@ -449,6 +491,7 @@ app.post("/api/auth/login", async (req, res) => {
         message: "Sistema de autenticação não configurado",
       });
     }
+    
     const data = fs.readFileSync(usuariosPath, "utf8");
     let usuarios = [];
     try {
@@ -461,6 +504,7 @@ app.post("/api/auth/login", async (req, res) => {
         message: "Erro no arquivo de usuários",
       });
     }
+    
     const usuario = usuarios.find((u) => u.cpf === cpf && u.tipo === tipo);
     if (!usuario) {
       console.log("Usuário não encontrado para CPF:", cpf, "e tipo:", tipo);
@@ -469,7 +513,9 @@ app.post("/api/auth/login", async (req, res) => {
         message: "Usuário não encontrado",
       });
     }
+    
     console.log("Usuário encontrado:", usuario.nome);
+    
     if (usuario.senha !== senha) {
       console.log("Senha incorreta para usuário:", usuario.nome);
       return res.status(401).json({
@@ -477,6 +523,7 @@ app.post("/api/auth/login", async (req, res) => {
         message: "Senha incorreta",
       });
     }
+    
     if (tipo === "aluno" && usuario.turma !== turma) {
       console.log(
         "Turma incorreta. Esperada:",
@@ -489,13 +536,22 @@ app.post("/api/auth/login", async (req, res) => {
         message: `Turma incorreta. Sua turma é ${usuario.turma}.`,
       });
     }
-    const userSession = {
+    
+    const userPayload = {
       id: usuario.id,
       nome: usuario.nome,
       cpf: usuario.cpf,
       tipo: usuario.tipo,
       turma: usuario.turma,
     };
+    
+    console.log("Criando sessão para usuário:", userPayload);
+    
+    // Gerar token JWT
+    const token = jwt.sign(userPayload, JWT_SECRET, { 
+      expiresIn: '24h' 
+    });
+    
     req.session.regenerate((err) => {
       if (err) {
         console.error("Erro ao regenerar sessão:", err);
@@ -504,8 +560,10 @@ app.post("/api/auth/login", async (req, res) => {
           message: "Erro interno do servidor",
         });
       }
-      req.session.user = userSession;
-      console.log("Sessão criada com sucesso para:", userSession.nome);
+      
+      req.session.user = userPayload;
+      console.log("Sessão criada com sucesso para:", userPayload.nome);
+      
       req.session.save((err) => {
         if (err) {
           console.error("Erro ao salvar sessão:", err);
@@ -514,10 +572,14 @@ app.post("/api/auth/login", async (req, res) => {
             message: "Erro interno do servidor",
           });
         }
+        
+        console.log("Sessão salva com sucesso. Enviando resposta com token JWT.");
+        
         res.json({
           success: true,
           message: "Login realizado com sucesso!",
-          user: userSession,
+          user: userPayload,
+          token: token, // Incluindo o token na resposta
           redirectUrl:
             tipo === "aluno"
               ? "/aluno/aluno.html"
@@ -527,12 +589,9 @@ app.post("/api/auth/login", async (req, res) => {
     });
   } catch (error) {
     console.error("ERRO CRÍTICO NO LOGIN:", error);
-    // No final do endpoint de login, altere para:
-    res.json({
-      success: true,
-      message: "Login realizado com sucesso!",
-      user: userSession,
-      redirectUrl: tipo === "aluno" ? `/aluno/${userSession.id}` : "/professor",
+    res.status(500).json({
+      success: false,
+      message: "Erro interno do servidor: " + error.message,
     });
   }
 });
@@ -573,6 +632,42 @@ app.get("/api/debug/session", (req, res) => {
     cookies: req.cookies,
     activeSessions: Array.from(activeSessions.entries()),
   });
+});
+
+// Rota para o dashboard do professor com verificação de token
+app.get("/api/professor/dashboard", checkAuth, (req, res) => {
+  try {
+    // VERIFICAÇÃO DE SEGURANÇA ADICIONADA
+    if (!req.user || !req.user.tipo) {
+      console.error("Usuário não definido na requisição:", req.user);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Dados de usuário inválidos' 
+      });
+    }
+
+    // Verifica se é professor
+    if (req.user.tipo !== "professor") {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Acesso restrito a professores' 
+      });
+    }
+
+    // Resto do código do dashboard...
+    res.json({ 
+      success: true, 
+      message: 'Dashboard do professor',
+      data: req.user 
+    });
+    
+  } catch (error) {
+    console.error('Erro no dashboard do professor:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erro interno no servidor' 
+    });
+  }
 });
 
 app.get("/api/exams/:examId/attempt/:studentCpf", async (req, res) => {
@@ -1003,6 +1098,7 @@ app.get("/api/auth/status", (req, res) => {
 });
 
 // Rota específica para servir aluno.html
+// Rota para a área do aluno com URL única
 app.get('/aluno/:alunoId', async (req, res) => {
     try {
         const { alunoId } = req.params;
@@ -1019,9 +1115,16 @@ app.get('/aluno/:alunoId', async (req, res) => {
         }
         
         console.log('[ROTA ALUNO] Aluno encontrado:', aluno.nome);
-        
-        // Servir o arquivo aluno.html da pasta raiz do frontend
-        res.sendFile(path.join(__dirname, '../frontend/aluno.html'));
+
+        // Se já está logado e é o mesmo aluno, servir a página
+        if (req.session.user && req.session.user.id === alunoId) {
+            console.log('[ROTA ALUNO] Usuário autenticado, servindo página');
+            return res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
+        }
+
+        // Se não está logado, redirecionar para login
+        console.log('[ROTA ALUNO] Usuário não autenticado, redirecionando para login');
+        res.redirect(`/login/?redirect=/aluno/${alunoId}&message=Faça login para acessar sua área exclusiva`);
         
     } catch (error) {
         console.error('Erro na rota do aluno:', error);
@@ -1029,12 +1132,12 @@ app.get('/aluno/:alunoId', async (req, res) => {
     }
 });
 
-// Rota alternativa para aluno.html (sem ID)
+// Rota para a área do aluno
 app.get('/aluno', checkAuth, (req, res) => {
     if (req.user.tipo !== 'aluno') {
         return res.redirect('/login/?error=Acesso restrito a alunos');
     }
-    res.sendFile(path.join(__dirname, '../frontend/aluno.html'));
+    res.sendFile(path.join(__dirname, '../frontend/aluno/aluno.html'));
 });
 
 // Rota para criar prova e associar alunos
@@ -1223,7 +1326,7 @@ app.get(
   }
 );
 
-// Rotas do Professor - Middleware checkAuth aplicado AQUI
+// Rotas do Professor - Middleware checkAuth aplicado AQUI - CORRIGIDO
 app.get(
   [
     "/professor",
@@ -1233,9 +1336,20 @@ app.get(
   ],
   checkAuth,
   (req, res) => {
+    // VERIFICAÇÃO DE SEGURANÇA ADICIONADA
+    if (!req.user || !req.user.tipo) {
+      console.error("[ERRO] Usuário não definido na requisição:", req.user);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Dados de usuário inválidos' 
+      });
+    }
+
+    // Verifica se é professor
     if (req.user.tipo !== "professor") {
       return res.redirect("/login/?error=Acesso restrito a professores");
     }
+    
     console.log("[ROTA] Servindo página do professor para:", req.user.nome);
     res.sendFile(path.join(__dirname, "../frontend/professor/professor.html"));
   }
@@ -1558,31 +1672,30 @@ app.get("/aluno/:alunoId", async (req, res) => {
   }
 });
 
-// Rota para gerar URL única do aluno - CORRIGIDA
+// Rota para gerar URL única do aluno
 app.get("/api/aluno/url-unica", checkAuth, async (req, res) => {
-  try {
-    console.log("[URL UNICA] Verificando autenticação...");
+    try {
+        console.log("[URL UNICA] Verificando autenticação...");
 
-    // Use req.session.user em vez de req.user
-    if (!req.session.user || req.session.user.tipo !== "aluno") {
-      console.log("[URL UNICA] Acesso não autorizado:", req.session.user);
-      return res.status(403).json({ error: "Acesso restrito a alunos" });
+        if (!req.session.user || req.session.user.tipo !== "aluno") {
+            console.log("[URL UNICA] Acesso não autorizado:", req.session.user);
+            return res.status(403).json({ error: "Acesso restrito a alunos" });
+        }
+
+        const urlUnica = `http://localhost:3000/aluno/${req.session.user.id}`;
+
+        console.log("[URL UNICA] Gerada para aluno:", req.session.user.id);
+
+        res.json({
+            url_unica: urlUnica,
+            aluno_id: req.session.user.id,
+            aluno_nome: req.session.user.nome,
+            message: "URL única gerada com sucesso",
+        });
+    } catch (error) {
+        console.error("Erro ao gerar URL única:", error);
+        res.status(500).json({ error: "Erro interno do servidor" });
     }
-
-    const urlUnica = `http://localhost:3000/aluno/${req.session.user.id}`;
-
-    console.log("[URL UNICA] Gerada para aluno:", req.session.user.id);
-
-    res.json({
-      url_unica: urlUnica,
-      aluno_id: req.session.user.id,
-      aluno_nome: req.session.user.nome,
-      message: "URL única gerada com sucesso",
-    });
-  } catch (error) {
-    console.error("Erro ao gerar URL única:", error);
-    res.status(500).json({ error: "Erro interno do servidor" });
-  }
 });
 
 // Middleware para verificar se o aluno acessando pela URL única é o mesmo logado - CORRIGIDO
@@ -1695,6 +1808,15 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Rota para a página de URL única do aluno
+app.get('/url', checkAuth, (req, res) => {
+    if (req.user.tipo !== 'aluno') {
+        return res.redirect('/login/?error=Acesso restrito a alunos');
+    }
+    console.log('[ROTA] Servindo página de URL única para:', req.user.nome);
+    res.sendFile(path.join(__dirname, '../frontend/UrlUnico/url.html'));
+});
+
 // ===== INICIALIZAÇÃO DO SERVIDOR =====
 function initializeUserFile() {
   const usuariosPath = path.join(__dirname, "usuario.json");
@@ -1744,6 +1866,7 @@ initializeDatabase()
       console.log(
         "💾 Sessões agora são gerenciadas em memória com limpeza automática"
       );
+      console.log("🔐 JWT habilitado para autenticação via token");
       console.log("📝 Exemplo de usuário para teste:");
       console.log(
         "   Professor: CPF=12345678901, Senha=senha123, Tipo=professor"

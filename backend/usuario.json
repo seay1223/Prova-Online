@@ -16,5 +16,14 @@
     "tipo": "aluno",
     "turma": "9B",
     "dataCadastro": "2025-09-15T13:04:49.436Z"
+  },
+  {
+    "id": "44aaa064-f529-4167-9546-ed76f140b631",
+    "nome": "teste2",
+    "cpf": "80635881004",
+    "senha": "Escolasesi123456",
+    "tipo": "aluno",
+    "turma": "9A",
+    "dataCadastro": "2025-09-17T11:49:09.906Z"
   }
 ]
