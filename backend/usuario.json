@@ -25,5 +25,14 @@
     "tipo": "aluno",
     "turma": "9A",
     "dataCadastro": "2025-09-17T11:49:09.906Z"
+  },
+  {
+    "id": "1a894b11-efc0-4edf-8c6b-41f9af594754",
+    "nome": "Augusto Guimarães Santos",
+    "cpf": "53262993808",
+    "senha": "Escolasesi123456",
+    "tipo": "aluno",
+    "turma": "9A",
+    "dataCadastro": "2025-09-22T13:16:55.837Z"
   }
 ]

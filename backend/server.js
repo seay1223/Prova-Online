@@ -582,7 +582,7 @@ app.post("/api/auth/login", async (req, res) => {
           token: token, // Incluindo o token na resposta
           redirectUrl:
             tipo === "aluno"
-              ? "/aluno/aluno.html"
+              ? "/UrlUnico/url.html"
               : "/professor/professor.html",
         });
       });
@@ -611,6 +611,30 @@ app.get("/api/auth/check", (req, res) => {
       message: "Não autenticado",
     });
   }
+});
+
+// Endpoint para buscar usuário por ID (para uso em url.js como fallback)
+app.get('/api/user/:id', (req, res) => {
+    try {
+        const userId = req.params.id;
+        const usuariosPath = path.join(__dirname, 'usuario.json');
+        
+        if (!fs.existsSync(usuariosPath)) {
+            return res.status(500).json({ error: 'Arquivo de usuários não encontrado' });
+        }
+
+        const usuarios = JSON.parse(fs.readFileSync(usuariosPath, 'utf8'));
+        const usuario = usuarios.find(u => u.id === userId);
+
+        if (usuario) {
+            res.json(usuario);
+        } else {
+            res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+    } catch (error) {
+        console.error('Erro ao buscar usuário por ID:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 
 app.post("/api/auth/logout", (req, res) => {
