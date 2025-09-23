@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const turmaGroupProfessor = document.getElementById('turmaGroupProfessor');
     const turmaProfessor = document.getElementById('turmaProfessor');
     
-    // Configuração inicial dos campos de turma
     if (turmaGroupAluno && turmaGroupProfessor) {
         if (tipoAluno && tipoAluno.checked) {
             turmaGroupAluno.style.display = 'block';
@@ -22,7 +21,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Event listeners para alternar entre aluno e professor
     if (tipoAluno && tipoProfessor && turmaGroupAluno && turmaGroupProfessor) {
         tipoAluno.addEventListener('change', function() {
             if (this.checked) {
@@ -43,7 +41,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Formatação do CPF
     const cpfInput = document.getElementById('cpf');
     if (cpfInput) {
         cpfInput.addEventListener('input', function(e) {
@@ -60,7 +57,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Submissão do formulário de login
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -132,11 +128,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.success) {
                         showSuccess('Login realizado com sucesso! Redirecionando...');
 
-                        // Armazenar informações do usuário no sessionStorage para uso posterior
                         sessionStorage.setItem('lastLogin', Date.now().toString());
                         sessionStorage.setItem('userData', JSON.stringify(data.user));
 
-                        // Armazenar informações do usuário de forma mais completa
                         if (data.user) {
                             sessionStorage.setItem('userType', data.user.tipo);
                             sessionStorage.setItem('userClass', data.user.turma || turma);
@@ -145,25 +139,21 @@ document.addEventListener('DOMContentLoaded', function() {
                             sessionStorage.setItem('loginTime', Date.now().toString());
                         }
 
-                        // Verificar se há um redirectUrl na resposta da API
                         if (data.redirectUrl) {
                             window.location.href = data.redirectUrl;
                             return;
                         }
                         
-                        // Redirecionar imediatamente conforme o tipo de usuário
                         if (data.user && data.user.tipo === 'aluno') {
                             console.log('✅ Redirecionando aluno...');
                             window.location.href = '/url';
                         } else if (data.user && data.user.tipo === 'professor') {
                             console.log('✅ Redirecionando professor...');
-                            // Testar se o dashboard do professor existe antes de redirecionar
                             checkPageExists('/professor/professor.html')
                                 .then(exists => {
                                     if (exists) {
                                         window.location.href = '/professor/professor.html';
                                     } else {
-                                        // Fallback para dashboard geral se específico não existir
                                         console.log('✅ Redirecionando fallback...');
                                         window.location.href = '/professor.html';
                                     }
@@ -190,7 +180,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Função para validar CPF
     function isValidCPF(cpf) {
         cpf = cpf.replace(/\D/g, '');
         if (cpf.length !== 11) return false;
@@ -217,7 +206,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
     
-    // Funções para exibir mensagens
     function showError(mensagem) {
         removeMessages();
         
@@ -276,7 +264,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Adicionar link de cadastro se não existir
     if (!document.querySelector('.register-link')) {
         const registerLink = document.createElement('div');
         registerLink.className = 'register-link';
@@ -289,14 +276,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Função para verificar se uma página existe
 function checkPageExists(url) {
     return fetch(url, { method: 'HEAD' })
         .then(response => response.status !== 404)
         .catch(() => false);
 }
 
-// Função auxiliar para obter o ID do usuário logado (para uso em outras páginas)
 function getUserId() {
     try {
         const userData = sessionStorage.getItem('userData');
@@ -305,7 +290,6 @@ function getUserId() {
             return user.id;
         }
         
-        // Fallback: verificar se há sessão ativa
         return fetch('/api/auth/check', {
             credentials: 'include'
         })

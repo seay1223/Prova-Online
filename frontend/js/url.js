@@ -1,24 +1,20 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== PÁGINA URL ÚNICA CARREGADA ===');
     
-    // Função para formatar CPF
     function formatarCPF(cpf) {
         if (!cpf) return '';
         cpf = cpf.replace(/\D/g, '');
         return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
     }
 
-    // Função para atualizar interface
     function atualizarInterface(user) {
         if (!user || !user.nome || !user.cpf || !user.id) {
             throw new Error('Dados do usuário incompletos');
         }
         
-        // Atualiza nome e CPF
         document.getElementById('userName').textContent = user.nome;
         document.getElementById('userCpf').textContent = `CPF: ${formatarCPF(user.cpf)}`;
         
-        // Gera URL com ID do usuário - DIFERENTE PARA ALUNO E PROFESSOR
         let urlUnica;
         if (user.tipo === 'aluno') {
             urlUnica = `http://localhost:3000/aluno/${user.id}`;
@@ -33,7 +29,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`✅ Interface atualizada com sucesso para ${user.tipo}!`);
     }
 
-    // Verificar autenticação
     fetch('/api/auth/check', {
         credentials: 'include'
     })
@@ -56,7 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = '/login/';
     });
 
-    // === FUNÇÕES DE INTERAÇÃO (MANTIDAS) ===
     window.copyUrl = function() {
         const urlInput = document.getElementById("urlInput");
         urlInput.select();

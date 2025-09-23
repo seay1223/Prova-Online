@@ -1,4 +1,4 @@
-// Código de logout genérico que pode ser usado em várias páginas
+// Código de logout atualizado e corrigido
 document.addEventListener('DOMContentLoaded', function() {
     const logoutBtn = document.querySelector(".logout-btn");
     
@@ -14,17 +14,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.removeItem('userData');
                 sessionStorage.removeItem('usuarioLogado');
                 
-                // Redireciona para a página de login correta
-                const currentPath = window.location.pathname;
-                let redirectUrl = '/login';
-                
-                if (currentPath.includes('/aluno')) {
-                    redirectUrl = '/aluno/login';
-                } else if (currentPath.includes('/professor')) {
-                    redirectUrl = '/professor/login';
-                }
-                
-                window.location.href = redirectUrl;
+                // SEMPRE redireciona para /login (que EXISTE e FUNCIONA)
+                window.location.href = '/login';
             }
         });
     }
