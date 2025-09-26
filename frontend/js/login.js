@@ -139,12 +139,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             sessionStorage.setItem('loginTime', Date.now().toString());
                         }
 
-                        if (data.redirectUrl) {
+                        // MODIFICAÇÃO: Verificar parâmetro de redirecionamento na URL
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const redirect = urlParams.get('redirect');
+
+                        if (redirect && redirect.startsWith('/')) {
+                            console.log('✅ Redirecionando para:', redirect);
+                            window.location.href = redirect;
+                        } else if (data.redirectUrl) {
                             window.location.href = data.redirectUrl;
-                            return;
-                        }
-                        
-                        if (data.user && data.user.tipo === 'aluno') {
+                        } else if (data.user && data.user.tipo === 'aluno') {
                             console.log('✅ Redirecionando aluno...');
                             window.location.href = '/url';
                         } else if (data.user && data.user.tipo === 'professor') {

@@ -1,76 +1,51 @@
+// === session-check.js COMPLETO E CORRIGIDO ===
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== VERIFICAÇÃO DE SESSÃO INICIADA ===');
 
-    const noCheckPages = [
-        '/login/',
-        '/login',
-        '/cadastro/',
-        '/cadastro',
-        '/contato/',
-        '/politica/',
-        '/termos/',
-        '/',
-        ''
-    ];
-
     const currentPath = window.location.pathname;
 
-    if (noCheckPages.includes(currentPath) || noCheckPages.includes(currentPath + '/')) {
-        console.log('⏭️ Página excluída da verificação:', currentPath);
-        return;
-    }
-
-    const publicPages = [
+    // Páginas que NÃO devem ser verificadas
+    const noCheckPages = [
+        '/login',
         '/login/',
+        '/cadastro',
         '/cadastro/',
-        '/contato/',
-        '/politica/',
-        '/termos/',
+        '/contato',
+        '/politica',
+        '/termos',
         '/',
-        ''
+        '',
+        // Exceções para URLs únicas (aluno/professor por ID)
+        ...currentPath.match(/^\/aluno\/[a-f0-9-]+$/) ? [currentPath] : [],
+        ...currentPath.match(/^\/professor\/[a-f0-9-]+$/) ? [currentPath] : []
     ];
 
-    const isPublicPage = publicPages.some(page => 
-        window.location.pathname === page || 
-        window.location.pathname.startsWith(page.replace(/\/$/, ''))
-    );
+    const isExcluded = noCheckPages.some(page => {
+        return currentPath === page || currentPath === page + '/';
+    });
 
-    if (isPublicPage) {
-        console.log('📄 Página pública, sessão não verificada');
+    if (isExcluded) {
+        console.log('⏭️ Página excluída da verificação:', currentPath);
         return;
     }
 
     console.log('🔐 Verificando autenticação para página protegida...');
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-        console.warn('⏰ Timeout: Verificação de sessão demorou mais de 5 segundos.');
-    }, 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     fetch('/api/auth/check', {
         method: 'GET',
         credentials: 'include',
         signal: controller.signal,
-        headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache'
-        }
+        headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
     })
     .then(response => {
         clearTimeout(timeoutId);
-        console.log('📡 Resposta recebida da API /api/auth/check:', response.status);
-
-        if (!response.ok) {
-            console.warn('⚠️ API retornou erro:', response.status);
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
     })
     .then(data => {
-        console.log('✅ Dados da API /api/auth/check:', data);
-
         if (data.isAuthenticated && data.user) {
             handleAuthenticated(data.user);
         } else {
@@ -79,25 +54,13 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .catch(error => {
         clearTimeout(timeoutId);
-        console.error('❌ Erro CRÍTICO ao verificar sessão:', error);
-
         if (error.name === 'AbortError') {
-            console.warn('⚠️ Verificação de sessão foi abortada (timeout).');
-            handleNotAuthenticated();
-        } else {
-            console.error('Erro na verificação de sessão:', error);
-            handleNotAuthenticated();
+            console.warn('⚠️ Verificação de sessão expirou (5s).');
         }
+        handleNotAuthenticated();
     });
 
     function handleAuthenticated(user) {
-        console.log('✅ Usuário autenticado via API:', user.nome);
-
-        const currentPath = window.location.pathname;
-
-        // REMOVA O BLOCO DE REDIRECIONAMENTO DO LOGIN
-        // Deixe apenas a verificação de permissões:
-
         const isProfessorPage = currentPath.includes('/professor');
         const isAlunoPage = currentPath.includes('/aluno');
 
@@ -105,74 +68,46 @@ document.addEventListener('DOMContentLoaded', function() {
             showAccessDenied('Acesso restrito a professores');
             return;
         }
-
         if (isAlunoPage && user.tipo !== 'aluno') {
             showAccessDenied('Acesso restrito a alunos');
             return;
         }
-
         updateUserInterface(user);
     }
 
     function handleNotAuthenticated() {
-        console.log('❌ Usuário NÃO autenticado via API.');
+        if (window.location.pathname.includes('/login')) return;
 
-        if (window.location.pathname.includes('/login')) {
-            console.log('ℹ️ Já está na página de login, não redirecionar.');
-            return;
-        }
-
-        // **LÓGICA DE TOLERÂNCIA: Verificar se o login foi bem-sucedido recentemente**
         const lastLogin = sessionStorage.getItem('lastLogin');
         const now = Date.now();
         const FIVE_MINUTES = 5 * 60 * 1000;
 
         if (lastLogin && (now - parseInt(lastLogin)) < FIVE_MINUTES) {
-            console.log('✅ Login recente detectado (dentro de 5 min), ignorando falha de verificação de sessão. Permitindo acesso.');
+            console.log('✅ Login recente detectado. Permitindo acesso temporário.');
             return;
         }
 
-        console.log('🔁 Redirecionando para login devido à falha de autenticação.');
+        console.log('🔁 Redirecionando para login...');
         const redirectUrl = '/login/?error=Sessão expirada. Faça login novamente.';
-        setTimeout(() => {
-            window.location.replace(redirectUrl);
-        }, 1000);
+        setTimeout(() => window.location.replace(redirectUrl), 1000);
     }
 
     function showAccessDenied(message) {
         const accessDenied = document.createElement('div');
         accessDenied.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background: #f44336;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            z-index: 10000;
-            font-family: Arial, sans-serif;
+            position: fixed; top: 0; left: 0; width: 100%;
+            background: #f44336; color: white; padding: 20px; text-align: center;
+            z-index: 10000; font-family: Arial, sans-serif;
         `;
-        accessDenied.innerHTML = `
-            <strong>Acesso Negado:</strong> ${message}
-            <br>
-            <small>Redirecionando para login em 5 segundos...</small>
-        `;
+        accessDenied.innerHTML = `<strong>Acesso Negado:</strong> ${message}<br><small>Redirecionando em 5s...</small>`;
         document.body.appendChild(accessDenied);
-
-        setTimeout(() => {
-            window.location.href = '/login/?error=' + encodeURIComponent(message);
-        }, 5000);
+        setTimeout(() => window.location.href = '/login/?error=' + encodeURIComponent(message), 5000);
     }
 
     function updateUserInterface(user) {
-        console.log('👤 Atualizando interface para usuário:', user.nome);
-        const userElements = document.querySelectorAll('[data-user]');
-        userElements.forEach(el => {
+        document.querySelectorAll('[data-user]').forEach(el => {
             const prop = el.getAttribute('data-user');
-            if (user[prop]) {
-                el.textContent = user[prop];
-            }
+            if (user[prop]) el.textContent = user[prop];
         });
     }
 });

@@ -1,4 +1,4 @@
-// main.js - Ponto de entrada principal (CORRIGIDO)
+
 
 class MainApp {
     constructor() {
