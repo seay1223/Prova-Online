@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prova Online - Gerenciar Turmas e Alunos</title>
+    <link rel="stylesheet" href="/frontend/css/gerenciar.css">
+</head>
+<body>
+    <div class="nav-container">
+        <div class="navbar">
+            <h1>Prova Online - Área do Professor</h1>
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">P</div>
+                <span id="user-name">Professor</span>
+                <span id="user-cpf" style="font-size: 12px; opacity: 0.7;"></span>
+                <button class="logout-btn">Sair</button>
+            </div>
+        </div>    
+    </div>
+    
+    <div class="welcome-section">
+        <h2>Gerenciar</h2>
+        <p>Gerencie suas turmas e alunos</p>
+    </div>
+    
+    <div class="management-container">
+        <div class="management-card" id="manage-classes">
+            <h3>Gerenciar Turmas</h3>
+            <p>Crie, edite ou exclua suas turmas.</p>
+            <button class="manage-btn" onclick="location.href='/professor/gerenciar/turmas'">Gerenciar Turmas</button>
+        </div>
+        <div class="management-card" id="manage-students">
+            <h3>Gerenciar Alunos</h3>
+            <p>Adicione, edite ou remova alunos das suas turmas.</p>
+            <button class="manage-btn" onclick="location.href='/professor/gerenciar/alunos'">Gerenciar Alunos</button>
+        </div>
+    </div>
+    
+    <!-- Modal para criar turma -->
+    <div id="createClassModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Criar Nova Turma</h2>
+            <form id="createClassForm">
+                <div class="form-group">
+                    <label for="className">Nome da Turma:</label>
+                    <input type="text" id="className" name="className" required>
+                </div>
+                <div class="form-group">
+                    <label for="classSubject">Disciplina:</label>
+                    <input type="text" id="classSubject" name="classSubject" required>
+                </div>
+                <div class="form-group">
+                    <label for="classYear">Ano/Período:</label>
+                    <input type="text" id="classYear" name="classYear" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancelar</button>
+                    <button type="submit" class="submit-btn">Criar Turma</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Modal para adicionar aluno -->
+    <div id="addStudentModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Adicionar Aluno</h2>
+            <form id="addStudentForm">
+                <div class="form-group">
+                    <label for="studentName">Nome do Aluno:</label>
+                    <input type="text" id="studentName" name="studentName" required>
+                </div>
+                <div class="form-group">
+                    <label for="studentEmail">E-mail:</label>
+                    <input type="email" id="studentEmail" name="studentEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="studentClass">Turma:</label>
+                    <select id="studentClass" name="studentClass" required>
+                        <option value="">Selecione uma turma</option>
+                        <option value="1">Turma A - Matemática</option>
+                        <option value="2">Turma B - Português</option>
+                        <option value="3">Turma C - História</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancelar</button>
+                    <button type="submit" class="submit-btn">Adicionar Aluno</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
