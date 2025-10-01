@@ -1,5 +1,3 @@
-// uiManager.js - Gerenciamento de interface do usuário (versão corrigida)
-
 class UIManager {
     constructor() {
         this.notificationTimeout = null;

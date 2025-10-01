@@ -1,5 +1,3 @@
-// user-display.js - Exibir informações do usuário logado
-
 class UserDisplay {
     constructor() {
         this.userData = null;

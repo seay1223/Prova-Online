@@ -1,4 +1,3 @@
-// serverService.js - Serviços de comunicação com o servidor (CORRIGIDO)
 const API_BASE_URL = 'http://localhost:3000/api';
 
 class ServerService {

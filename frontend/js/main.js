@@ -1,5 +1,3 @@
-
-
 class MainApp {
     constructor() {
         this.currentUser = null;

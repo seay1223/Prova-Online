@@ -1,10 +1,9 @@
-// === session-check.js COMPLETO E CORRIGIDO ===
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== VERIFICAÇÃO DE SESSÃO INICIADA ===');
 
     const currentPath = window.location.pathname;
 
-    // Páginas que NÃO devem ser verificadas
+    // Páginas que NÃO devem ser verificadas (públicas)
     const noCheckPages = [
         '/login',
         '/login/',
@@ -15,17 +14,28 @@ document.addEventListener('DOMContentLoaded', function() {
         '/termos',
         '/',
         '',
-        // Exceções para URLs únicas (aluno/professor por ID)
-        ...currentPath.match(/^\/aluno\/[a-f0-9-]+$/) ? [currentPath] : [],
-        ...currentPath.match(/^\/professor\/[a-f0-9-]+$/) ? [currentPath] : []
+        '/url', // Página intermediária pós-login
     ];
 
+    // Verificar se é URL única de aluno ou professor (ex: /aluno/uuid ou /professor/uuid)
+    const isUniqueUrl = 
+        currentPath.match(/^\/aluno\/[a-f0-9-]{36,}$/) ||
+        currentPath.match(/^\/professor\/[a-f0-9-]{36,}$/);
+
+    // Se for URL única, também não verifica aqui (o backend cuida do redirecionamento)
+    if (isUniqueUrl) {
+        console.log('⏭️ Página de URL única excluída da verificação:', currentPath);
+        return;
+    }
+
     const isExcluded = noCheckPages.some(page => {
-        return currentPath === page || currentPath === page + '/';
+        const normalizedPage = page.endsWith('/') ? page : page + '/';
+        const normalizedPath = currentPath.endsWith('/') ? currentPath : currentPath + '/';
+        return normalizedPath === normalizedPage;
     });
 
     if (isExcluded) {
-        console.log('⏭️ Página excluída da verificação:', currentPath);
+        console.log('⏭️ Página pública excluída da verificação:', currentPath);
         return;
     }
 
@@ -61,8 +71,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function handleAuthenticated(user) {
-        const isProfessorPage = currentPath.includes('/professor');
-        const isAlunoPage = currentPath.includes('/aluno');
+        const isProfessorPage = /^\/professor(\/|$)/.test(currentPath);
+        const isAlunoPage = /^\/aluno(\/|$)/.test(currentPath);
 
         if (isProfessorPage && user.tipo !== 'professor') {
             showAccessDenied('Acesso restrito a professores');
@@ -76,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleNotAuthenticated() {
-        if (window.location.pathname.includes('/login')) return;
+        if (currentPath.includes('/login')) return;
 
         const lastLogin = sessionStorage.getItem('lastLogin');
         const now = Date.now();
@@ -88,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         console.log('🔁 Redirecionando para login...');
-        const redirectUrl = '/login/?error=Sessão expirada. Faça login novamente.';
+        const redirectUrl = `/login/?redirect=${encodeURIComponent(currentPath)}&error=Sessão expirada. Faça login novamente.`;
         setTimeout(() => window.location.replace(redirectUrl), 1000);
     }
 
@@ -101,7 +111,9 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         accessDenied.innerHTML = `<strong>Acesso Negado:</strong> ${message}<br><small>Redirecionando em 5s...</small>`;
         document.body.appendChild(accessDenied);
-        setTimeout(() => window.location.href = '/login/?error=' + encodeURIComponent(message), 5000);
+        setTimeout(() => {
+            window.location.href = '/login/?error=' + encodeURIComponent(message);
+        }, 5000);
     }
 
     function updateUserInterface(user) {

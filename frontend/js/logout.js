@@ -1,4 +1,4 @@
-// Código de logout atualizado e corrigido
+
 document.addEventListener('DOMContentLoaded', function() {
     const logoutBtn = document.querySelector(".logout-btn");
     

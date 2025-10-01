@@ -1,4 +1,3 @@
-// questionManager.js - Gerenciamento de questões (CORRIGIDO)
 export class Question {
     constructor(data = {}) {
         this.id = data.id || this.generateId();
