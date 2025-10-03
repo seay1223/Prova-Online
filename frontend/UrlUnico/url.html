@@ -3,61 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prova Online - Área do Aluno</title>
+    <title>Sua Área Exclusiva - PROVA-ONLINE</title>
     <link rel="stylesheet" href="/css/url.css">
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Prova Online - Área do Aluno</h1>
-            <div class="user-info">
-                <span id="userName">Samuel Reis</span>
-                <span id="userCpf">CPF: 518.333.198-77</span>
+        <div class="logo">🎓</div>
+        <h1>Sua Área Exclusiva</h1>
+        <p class="subtitle">Guarde este link para acessar sua área personalizada</p>
+        
+        <div class="user-info">
+            <div class="user-name" id="userName">Carregando...</div>
+            <div class="user-details">
+                <span id="userCpf">CPF: </span> • 
+                <span id="userType">Tipo: </span>
             </div>
         </div>
         
-        <div class="content">
-            <div class="welcome-section">
-                <h2>Bem-vindo à sua área de aluno</h2>
-                <p>Acesse suas provas e acompanhe seu desempenho</p>
+        <div class="url-section">
+            <label class="url-label">🔗 Sua URL Exclusiva:</label>
+            <div class="url-input-container">
+                <input type="text" id="urlInput" class="url-input" readonly>
+                <button onclick="copyUrl()" class="copy-btn">📋 Copiar</button>
             </div>
-            
-            <div class="url-section">
-                <h3>🌐 Sua URL de Acesso Exclusivo</h3>
-                <p class="url-desc">Use este link para acessar diretamente sua área:</p>
-                
-                <div class="url-container">
-                    <input type="text" value="https://localhost:3000/aluno/2b25b496-87db-4325-bf62-20a97911b16f" 
-                           readonly class="url-input" id="urlInput">
-                    <button class="btn-copy" onclick="copyUrl()">📋 Copiar URL</button>
-                </div>
-                
-                <div class="url-actions">
-                    <button class="btn-open" onclick="openUrl()">
-                        🔗 Abrir em Nova Guia
-                    </button>
-                    <button class="btn-share" onclick="shareUrl()">
-                        📤 Compartilhar
-                    </button>
-                </div>
-                
-                <div class="benefits">
-                    <h4>⭐ Vantagens da URL única</h4>
-                    <ul>
-                        <li>Acesso rápido e direto à sua área</li>
-                        <li>Maior segurança com identificação única</li>
-                        <li>Link personalizado somente para você</li>
-                    </ul>
-                </div>
-            </div>
+            <p style="color: #666; font-size: 0.9rem; margin: 0;">
+                Esta é sua URL pessoal. Guarde-a para acessar diretamente sua área.
+            </p>
         </div>
         
-        <div class="footer">
-            <p>Sistema de Provas Online &copy; 2023 - Todos os direitos reservados</p>
+        <div class="action-buttons">
+            <button onclick="openUrl()" class="btn btn-primary">
+                🚀 Acessar Minha Área
+            </button>
+            <button onclick="shareUrl()" class="btn btn-secondary">
+                📤 Compartilhar
+            </button>
+            <a href="/login" class="btn btn-outline">
+                🔄 Fazer Logout
+            </a>
+        </div>
+        
+        <div class="instructions">
+            <h3>💡 Como usar sua URL exclusiva:</h3>
+            <ul>
+                <li><strong>Guarde este link</strong> em um local seguro</li>
+                <li><strong>Compartilhe apenas</strong> se necessário</li>
+                <li><strong>Acesse diretamente</strong> sem precisar fazer login novamente</li>
+                <li><strong>Use em qualquer dispositivo</strong> para acessar sua área</li>
+            </ul>
         </div>
     </div>
     
-    <div class="toast" id="toast">✅ URL copiada para a área de transferência!</div>
-    <script src="../js/url.js"></script>
+    <div id="toast" class="toast"></div>
+
+    <script src="/js/url.js"></script>
 </body>
 </html>

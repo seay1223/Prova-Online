@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.getElementById('userName').textContent = user.nome;
         document.getElementById('userCpf').textContent = `CPF: ${formatarCPF(user.cpf)}`;
+        document.getElementById('userType').textContent = `Tipo: ${user.tipo}`;
         
         let urlUnica;
         if (user.tipo === 'aluno') {
@@ -27,8 +28,10 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('urlInput').value = urlUnica;
         
         console.log(`✅ Interface atualizada com sucesso para ${user.tipo}!`);
+        console.log(`🔗 URL única gerada: ${urlUnica}`);
     }
 
+    // Verificar autenticação e carregar dados do usuário
     fetch('/api/auth/check', {
         credentials: 'include'
     })
@@ -67,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.openUrl = function() {
         const urlInput = document.getElementById("urlInput");
-        window.open(urlInput.value, "_blank");
+        window.open(urlInput.value, "_self");
     }
 
     window.shareUrl = async function() {
@@ -82,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             } else {
                 copyUrl();
+                showToast("✅ URL copiada! Compartilhe manualmente.");
             }
         } catch (error) {
             console.log("Compartilhamento cancelado");

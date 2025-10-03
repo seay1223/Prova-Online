@@ -2,7 +2,7 @@
 import sqlite3
 
 DB_PATH = "database/database.db"
-USER_ID = "" # Insira o ID do usuário a ser deletado aqui
+USER_ID = "2a2cfbbb-4886-481a-bf03-26428f26f2af" 
 
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()

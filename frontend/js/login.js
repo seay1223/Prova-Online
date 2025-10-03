@@ -11,22 +11,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const turmaGroupProfessor = document.getElementById('turmaGroupProfessor');
     const turmaProfessor = document.getElementById('turmaProfessor');
     
-    if (turmaGroupAluno && turmaGroupProfessor) {
-        if (tipoAluno && tipoAluno.checked) {
-            turmaGroupAluno.style.display = 'block';
-            turmaGroupProfessor.style.display = 'none';
-        } else if (tipoProfessor && tipoProfessor.checked) {
-            turmaGroupAluno.style.display = 'none';
-            turmaGroupProfessor.style.display = 'block';
+    // Configuração inicial dos grupos de turma
+    function setupTurmaGroups() {
+        if (turmaGroupAluno && turmaGroupProfessor) {
+            if (tipoAluno && tipoAluno.checked) {
+                turmaGroupAluno.style.display = 'block';
+                turmaGroupProfessor.style.display = 'none';
+            } else if (tipoProfessor && tipoProfessor.checked) {
+                turmaGroupAluno.style.display = 'none';
+                turmaGroupProfessor.style.display = 'block';
+            }
         }
     }
     
-    if (tipoAluno && tipoProfessor && turmaGroupAluno && turmaGroupProfessor) {
+    // Inicializar grupos de turma
+    setupTurmaGroups();
+    
+    // Event listeners para mudança de tipo de usuário
+    if (tipoAluno && tipoProfessor) {
         tipoAluno.addEventListener('change', function() {
             if (this.checked) {
                 turmaGroupAluno.style.display = 'block';
-                if (turmaAluno) turmaAluno.setAttribute('required', 'required');
                 turmaGroupProfessor.style.display = 'none';
+                if (turmaAluno) turmaAluno.setAttribute('required', 'required');
                 if (turmaProfessor) turmaProfessor.removeAttribute('required');
             }
         });
@@ -34,13 +41,14 @@ document.addEventListener('DOMContentLoaded', function() {
         tipoProfessor.addEventListener('change', function() {
             if (this.checked) {
                 turmaGroupProfessor.style.display = 'block';
-                if (turmaProfessor) turmaProfessor.setAttribute('required', 'required');
                 turmaGroupAluno.style.display = 'none';
+                if (turmaProfessor) turmaProfessor.setAttribute('required', 'required');
                 if (turmaAluno) turmaAluno.removeAttribute('required');
             }
         });
     }
     
+    // Formatação do CPF
     const cpfInput = document.getElementById('cpf');
     if (cpfInput) {
         cpfInput.addEventListener('input', function(e) {
@@ -57,11 +65,95 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Função principal de login
+    async function handleLogin(loginData) {
+        console.log('📤 Enviando dados para login:', {
+            cpf: loginData.cpf,
+            tipo: loginData.tipo,
+            turma: loginData.turma,
+            senha: '***'
+        });
+        
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(loginData),
+                credentials: 'include'
+            });
+            
+            console.log('📥 Resposta do servidor - Status:', response.status);
+            
+            const responseText = await response.text();
+            console.log('📥 Resposta do servidor - Texto:', responseText);
+            
+            if (!response.ok) {
+                let errorMessage = 'Erro na autenticação';
+                
+                try {
+                    const errorData = JSON.parse(responseText);
+                    errorMessage = errorData.message || errorMessage;
+                    
+                    // Mensagens específicas para cada tipo de erro
+                    if (response.status === 401) {
+                        if (errorData.message === 'Senha incorreta') {
+                            errorMessage = 'Senha incorreta. Verifique sua senha e tente novamente.';
+                        } else if (errorData.message === 'Usuário não encontrado') {
+                            errorMessage = 'Usuário não encontrado. Verifique o CPF e tipo de usuário.';
+                        } else if (errorData.message.includes('Turma incorreta')) {
+                            errorMessage = errorData.message;
+                        }
+                    } else if (response.status === 400) {
+                        errorMessage = errorData.message || 'Dados inválidos enviados';
+                    }
+                } catch (e) {
+                    errorMessage = responseText || 'Erro de conexão com o servidor';
+                }
+                
+                throw new Error(errorMessage);
+            }
+            
+            // Processar resposta de sucesso
+            const data = JSON.parse(responseText);
+            
+            if (data.success) {
+                return {
+                    success: true,
+                    data: data,
+                    message: data.message || 'Login realizado com sucesso!'
+                };
+            } else {
+                throw new Error(data.message || 'Erro no login');
+            }
+            
+        } catch (error) {
+            console.error('❌ Erro na requisição de login:', error);
+            throw error;
+        }
+    }
+    
+    // Salvar dados do usuário no sessionStorage
+    function saveUserData(userData, token, turma) {
+        sessionStorage.setItem('lastLogin', Date.now().toString());
+        sessionStorage.setItem('userData', JSON.stringify(userData));
+        sessionStorage.setItem('userType', userData.tipo);
+        sessionStorage.setItem('userClass', userData.turma || turma);
+        sessionStorage.setItem('userToken', token || '');
+        sessionStorage.setItem('isAuthenticated', 'true');
+        sessionStorage.setItem('loginTime', Date.now().toString());
+        
+        console.log('💾 Dados do usuário salvos:', userData);
+    }
+    
+    // Submissão do formulário de login
     if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
+        loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             removeMessages();
             
+            // Obter dados do formulário
             const cpf = document.getElementById('cpf').value.trim().replace(/\D/g, '');
             const password = document.getElementById('password').value.trim();
             const tipoElement = document.querySelector('input[name="tipo"]:checked');
@@ -74,6 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 turma = document.getElementById('turmaProfessor') ? document.getElementById('turmaProfessor').value : null;
             }
             
+            // Validações básicas
             if (!cpf || !password || !tipo) {
                 showError('Por favor, preencha todos os campos e selecione o tipo de usuário.');
                 return;
@@ -100,90 +193,71 @@ document.addEventListener('DOMContentLoaded', function() {
                 turma: turma
             };
             
-            console.log('Enviando dados para a API:', loginData);
+            // Mostrar loading
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Entrando...';
+            submitBtn.disabled = true;
             
-            fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(loginData),
-                credentials: 'include'
-            })
-            .then(async response => {
-                const responseText = await response.text();
+            try {
+                console.log('🔄 Iniciando processo de login...');
                 
-                if (!response.ok) {
-                    try {
-                        const errorData = JSON.parse(responseText);
-                        throw new Error(errorData.message || 'Erro na autenticação');
-                    } catch (e) {
-                        throw new Error(responseText || 'Erro na autenticação');
-                    }
-                }
+                // Tentar fazer login
+                const loginResult = await handleLogin(loginData);
                 
-                try {
-                    const data = JSON.parse(responseText);
+                if (loginResult.success) {
+                    showSuccess('Login realizado com sucesso! Redirecionando para sua área exclusiva...');
                     
-                    if (data.success) {
-                        showSuccess('Login realizado com sucesso! Redirecionando...');
-
-                        sessionStorage.setItem('lastLogin', Date.now().toString());
-                        sessionStorage.setItem('userData', JSON.stringify(data.user));
-
-                        if (data.user) {
-                            sessionStorage.setItem('userType', data.user.tipo);
-                            sessionStorage.setItem('userClass', data.user.turma || turma);
-                            sessionStorage.setItem('userToken', data.token || '');
-                            sessionStorage.setItem('isAuthenticated', 'true');
-                            sessionStorage.setItem('loginTime', Date.now().toString());
-                        }
-
-                        // MODIFICAÇÃO: Verificar parâmetro de redirecionamento na URL
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const redirect = urlParams.get('redirect');
-
-                        if (redirect && redirect.startsWith('/')) {
-                            console.log('✅ Redirecionando para:', redirect);
-                            window.location.href = redirect;
-                        } else if (data.redirectUrl) {
-                            window.location.href = data.redirectUrl;
-                        } else if (data.user && data.user.tipo === 'aluno') {
-                            console.log('✅ Redirecionando aluno...');
-                            window.location.href = '/url';
-                        } else if (data.user && data.user.tipo === 'professor') {
-                            console.log('✅ Redirecionando professor...');
-                            checkPageExists('/professor/professor.html')
-                                .then(exists => {
-                                    if (exists) {
-                                        window.location.href = '/professor/professor.html';
-                                    } else {
-                                        console.log('✅ Redirecionando fallback...');
-                                        window.location.href = '/professor.html';
-                                    }
-                                })
-                                .catch(() => {
-                                    console.log('✅ Redirecionando fallback...');
-                                    window.location.href = '/professor.html';
-                                });
-                        } else {
-                            console.log('✅ Redirecionando fallback...');
-                            window.location.href = '/professor.html';
-                        }
+                    // Salvar dados do usuário
+                    saveUserData(loginResult.data.user, loginResult.data.token, turma);
+                    
+                    console.log('✅ Login bem-sucedido!', loginResult.data.user);
+                    
+                    // Verificar se há redirect na URL
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const redirectParam = urlParams.get('redirect');
+                    
+                    if (redirectParam && redirectParam.startsWith('/')) {
+                        console.log(`🎯 Redirecionando para URL específica: ${redirectParam}`);
+                        setTimeout(() => {
+                            window.location.href = redirectParam;
+                        }, 1500);
                     } else {
-                        showError(data.message || 'CPF, senha ou tipo de usuário incorretos.');
+                        // SEMPRE redirecionar para /url (página de URL única)
+                        console.log('🎯 Redirecionando para página de URL única: /url');
+                        setTimeout(() => {
+                            window.location.href = '/url';
+                        }, 1500);
                     }
-                } catch (e) {
-                    throw new Error('Resposta inválida do servidor');
                 }
-            })
-            .catch(error => {
-                console.error('Erro na requisição:', error);
-                showError(error.message || 'Erro ao conectar com o servidor. Tente novamente.');
-            });
+                
+            } catch (error) {
+                console.error('❌ Erro no processo de login:', error);
+                
+                // Mensagens de erro mais amigáveis
+                let userMessage = error.message;
+                
+                if (error.message.includes('Failed to fetch') || error.message.includes('Network Error')) {
+                    userMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+                } else if (error.message.includes('Senha incorreta')) {
+                    userMessage = 'Senha incorreta. Verifique sua senha.';
+                } else if (error.message.includes('Usuário não encontrado')) {
+                    userMessage = 'Usuário não encontrado. Verifique o CPF e tipo de conta.';
+                    // Sugerir criar conta
+                    showSuggestion('Este usuário não existe. <a href="/cadastro" style="color: #1976d2; text-decoration: underline;">Clique aqui para criar uma conta</a>');
+                }
+                
+                showError(userMessage);
+                
+            } finally {
+                // Restaurar botão
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
         });
     }
     
+    // Validação de CPF
     function isValidCPF(cpf) {
         cpf = cpf.replace(/\D/g, '');
         if (cpf.length !== 11) return false;
@@ -210,12 +284,18 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
     
+    // Exibir mensagem de erro
     function showError(mensagem) {
         removeMessages();
         
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-message message';
-        errorDiv.textContent = mensagem;
+        errorDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">❌</span>
+                <span>${mensagem}</span>
+            </div>
+        `;
         errorDiv.style.cssText = 'background-color: #ffebee; color: #c62828; padding: 12px; border-radius: 4px; margin-bottom: 16px; border: 1px solid #ef5350;';
         
         if (loginForm) {
@@ -228,15 +308,21 @@ document.addEventListener('DOMContentLoaded', function() {
             if (errorDiv.parentNode) {
                 errorDiv.parentNode.removeChild(errorDiv);
             }
-        }, 5000);
+        }, 8000);
     }
     
+    // Exibir mensagem de sucesso
     function showSuccess(mensagem) {
         removeMessages();
         
         const successDiv = document.createElement('div');
         successDiv.className = 'success-message message';
-        successDiv.textContent = mensagem;
+        successDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">✅</span>
+                <span>${mensagem}</span>
+            </div>
+        `;
         successDiv.style.cssText = 'background-color: #e8f5e9; color: #2e7d32; padding: 12px; border-radius: 4px; margin-bottom: 16px; border: 1px solid #66bb6a;';
         
         if (loginForm) {
@@ -252,8 +338,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 5000);
     }
     
+    // Exibir sugestão
+    function showSuggestion(mensagem) {
+        const suggestionDiv = document.createElement('div');
+        suggestionDiv.className = 'suggestion-message';
+        suggestionDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px;">💡</span>
+                <span>${mensagem}</span>
+            </div>
+        `;
+        suggestionDiv.style.cssText = 'background-color: #e3f2fd; color: #1565c0; padding: 10px; border-radius: 4px; margin-top: 8px; border: 1px solid #90caf9;';
+        
+        const errorDiv = document.querySelector('.error-message');
+        if (errorDiv) {
+            errorDiv.appendChild(suggestionDiv);
+        }
+    }
+    
+    // Remover mensagens existentes
     function removeMessages() {
-        const messages = document.querySelectorAll('.message');
+        const messages = document.querySelectorAll('.message, .suggestion-message');
         messages.forEach(msg => {
             if (msg.parentNode) {
                 msg.parentNode.removeChild(msg);
@@ -261,31 +366,57 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    function checkAuthenticationStatus() {
-        if (window.disableSessionCheck) {
-            console.log('❌ Verificação de sessão desativada nesta página');
-            return;
+    // Adicionar link de cadastro
+    function addRegisterLink() {
+        if (!document.querySelector('.register-link')) {
+            const registerLink = document.createElement('div');
+            registerLink.className = 'register-link';
+            registerLink.style.cssText = 'text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e0e0e0;';
+            registerLink.innerHTML = `
+                <p style="margin: 0; color: #666;">
+                    Não tem uma conta? 
+                    <a href="/cadastro" style="color: #2196f3; text-decoration: none; font-weight: bold;">
+                        Cadastre-se aqui
+                    </a>
+                </p>
+            `;
+            
+            if (loginForm) {
+                loginForm.appendChild(registerLink);
+            }
         }
     }
     
-    if (!document.querySelector('.register-link')) {
-        const registerLink = document.createElement('div');
-        registerLink.className = 'register-link';
-        registerLink.style.cssText = 'text-align: center; margin-top: 20px;';
-        registerLink.innerHTML = '<p>Não tem uma conta? <a href="cadastro.html" style="color: #2196f3; text-decoration: none;">Cadastre-se</a></p>';
+    // Verificar se há parâmetros de erro na URL
+    function checkUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
         
-        if (loginForm) {
-            loginForm.appendChild(registerLink);
+        if (error) {
+            showError(decodeURIComponent(error));
+        }
+        
+        const success = urlParams.get('success');
+        if (success) {
+            showSuccess(decodeURIComponent(success));
         }
     }
+    
+    // Inicializar componentes
+    addRegisterLink();
+    checkUrlParams();
+    
+    console.log('✅ Login page inicializada com sucesso!');
 });
 
+// Verificar se página existe
 function checkPageExists(url) {
     return fetch(url, { method: 'HEAD' })
         .then(response => response.status !== 404)
         .catch(() => false);
 }
 
+// Obter ID do usuário
 function getUserId() {
     try {
         const userData = sessionStorage.getItem('userData');
@@ -293,22 +424,7 @@ function getUserId() {
             const user = JSON.parse(userData);
             return user.id;
         }
-        
-        return fetch('/api/auth/check', {
-            credentials: 'include'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.isAuthenticated && data.user) {
-                sessionStorage.setItem('userData', JSON.stringify(data.user));
-                return data.user.id;
-            }
-            return null;
-        })
-        .catch(error => {
-            console.error('Erro ao verificar autenticação:', error);
-            return null;
-        });
+        return null;
     } catch (error) {
         console.error('Erro ao obter ID do usuário:', error);
         return null;
